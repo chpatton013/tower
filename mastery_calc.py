@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 
+import bisect
 import argparse
 import dataclasses
 from typing import Iterator
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+
+
+# Global constants
 
 # fmt: off
 GAME_SPEED = 6.25 * 0.8
@@ -12,6 +16,8 @@ WAVE_DURATION = 26.0
 WAVE_COOLDOWN = 5.0
 WAVE_SKIP_CHANCE = 0.19
 WAVE_SKIP_COIN_BONUS = 1.10
+
+TIER_COIN_BONUS = [1.0, 1.8, 2.6, 3.4, 4.2, 5.0, 5.8, 6.6, 7.5, 8.7, 10.3, 12.2, 14.7, 17.6, 21.3, 25.2, 29.1, 33.0]
 
 SPAWN_RATE_SEQUENCE = [10, 11, 13, 15, 17, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 37, 39, 40, 42, 44, 46, 48, 49, 50, 52, 54, 56]
 SPAWN_RATE_WAVES = [1, 3, 6, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500]
@@ -78,10 +84,13 @@ MASTERY_STONE_COSTS = {
 # fmt: on
 
 
+# Data types
+
 @dataclasses.dataclass
 class Simulation:
     name: str = ""
     mastery: str | None = None
+    tier: int = 1
     max_waves: int = 0
     orb_kills: float = 1.0
     coin: int | None = None
@@ -90,9 +99,6 @@ class Simulation:
     wave_skip: int | None = None
     intro_sprint: int | None = None
     wave_accelerator: int | None = None
-    interesting_waves: set[int] = dataclasses.field(
-        default_factory=lambda: set(SPAWN_RATE_WAVES)
-    )
 
     def max_intro_wave(self) -> int:
         return (
@@ -119,6 +125,13 @@ class Simulation:
 
 
 @dataclasses.dataclass
+class SimulationWaveResult:
+    wave: int
+    elapsed_time: float
+    value: float
+
+
+@dataclasses.dataclass
 class PlotLine:
     name: str
     mastery: str | None = None
@@ -139,7 +152,15 @@ class Plot:
     xlabel: str
     ylabel: str
     bottom: float | None = None
+    log_scale: bool = False
     lines: list[PlotLine] = dataclasses.field(default_factory=list)
+
+
+# Argument handling
+
+def tier_and_wave_arg(arg: str) -> tuple[int, int]:
+    tier, _, wave = arg.partition(":")
+    return int(tier), int(wave)
 
 
 def add_simulation_args(parser: argparse.ArgumentParser):
@@ -148,6 +169,12 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         type=float,
         default=1.0,
         help="Average portion of kills to orbs [0.0-1.0]",
+    )
+    parser.add_argument(
+        "--log",
+        action="store_true",
+        default=False,
+        help="Render results on a log scale",
     )
     parser.add_argument("--output", "-o", default=None, help="Filename for saved plot")
 
@@ -191,6 +218,14 @@ def add_mastery_args(parser: argparse.ArgumentParser):
     )
 
 
+def mastery_level(name: str | None) -> int | None:
+    if name is None or name == "locked":
+        return None
+    if int(name) in range(0, 10):
+        return int(name)
+    raise ValueError(f"Invalid mastery level: {name}")
+
+
 def convert_mastery_args(args: argparse.Namespace) -> None:
     args.coin = mastery_level(args.coin)
     args.extra_orb = mastery_level(args.extra_orb)
@@ -218,7 +253,6 @@ def mastery_args_description(args: argparse.Namespace) -> list[str]:
 
 
 def add_relative_args(parser: argparse.ArgumentParser):
-    parser.add_argument("wave", type=int, help="Wave number to simulate")
     parser.add_argument(
         "--relative",
         "-r",
@@ -228,12 +262,18 @@ def add_relative_args(parser: argparse.ArgumentParser):
     )
 
 
+def add_wave_args(parser: argparse.ArgumentParser):
+    parser.add_argument("wave", type=int, help="Wave number to simulate")
+
+
 def relative_args_description(args: argparse.Namespace) -> list[str]:
     if args.relative:
         return ["Relative to baseline"]
     else:
         return ["Absolute coins"]
 
+
+# Simulation logic
 
 def simulate_wave(sim: Simulation, wave: int) -> float:
     spawn_rate_index = sim.spawn_rate_index(wave)
@@ -251,7 +291,7 @@ def simulate_wave(sim: Simulation, wave: int) -> float:
     if sim.critical_coin is not None:
         avg_coin_drops["basic"] *= 1.0 + CRITICAL_COIN_MASTERY_TABLE[sim.critical_coin]
 
-    avg_coin_drop = sum(avg_coin_drops.values())
+    avg_coin_drop = sum(avg_coin_drops.values()) * TIER_COIN_BONUS[sim.tier - 1]
 
     if sim.coin is not None:
         avg_coin_drop *= COIN_MASTERY_TABLE[sim.coin]
@@ -292,11 +332,11 @@ def wave_skip_factor(
     )
 
 
-def simulate_run(sim: Simulation) -> Iterator[tuple[int, float, float]]:
+def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     elapsed_time = 0
     total_coins = 0
 
-    yield (0, elapsed_time, total_coins)
+    yield SimulationWaveResult(wave=0, elapsed_time=elapsed_time, value=total_coins)
 
     # No coins are earned during intro sprint; other resources may be, but we aren't
     # calculating them yet.
@@ -304,7 +344,9 @@ def simulate_run(sim: Simulation) -> Iterator[tuple[int, float, float]]:
         _ = simulate_wave(sim, wave)
         # Wave skip chance is not applied to intro waves
         elapsed_time += WAVE_DURATION
-        yield (wave, elapsed_time, total_coins)
+        yield SimulationWaveResult(
+            wave=wave, elapsed_time=elapsed_time, value=total_coins
+        )
 
     for wave in generate_regular_waves(sim):
         coins_this_wave = simulate_wave(sim, wave)
@@ -318,36 +360,103 @@ def simulate_run(sim: Simulation) -> Iterator[tuple[int, float, float]]:
         elapsed_time += WAVE_DURATION * wave_skip_factor(sim, 3 / 3, 2 / 3, 1 / 3)
         total_coins += coins_wave
 
-        yield (wave, elapsed_time, total_coins)
+        yield SimulationWaveResult(
+            wave=wave, elapsed_time=elapsed_time, value=total_coins
+        )
 
 
-def mastery_level(name: str | None) -> int | None:
-    if name is None or name == "locked":
-        return None
-    if int(name) in range(0, 10):
-        return int(name)
-    raise ValueError(f"Invalid mastery level: {name}")
+def evaluate_sims(
+    sims: list[Simulation],
+) -> Iterator[tuple[Simulation, list[SimulationWaveResult]]]:
+    for sim in sims:
+        yield sim, list(simulate_run(sim))
+
+
+# Data normalization
+
+def baseline_at_time(
+    baseline_results: list[SimulationWaveResult], elapsed_time: float
+) -> float:
+    index = bisect.bisect_left(
+        baseline_results, elapsed_time, key=lambda x: x.elapsed_time
+    )
+    if index == 0:
+        return baseline_results[0].value
+    if index == len(baseline_results):
+        return baseline_results[-1].value
+    lower_result = baseline_results[index - 1]
+    higher_result = baseline_results[index]
+    assert higher_result.elapsed_time - lower_result.elapsed_time != 0
+    lerp = (elapsed_time - lower_result.elapsed_time) / (
+        higher_result.elapsed_time - lower_result.elapsed_time
+    )
+    return lower_result.value + (higher_result.value - lower_result.value) * lerp
+
+
+def normalize_sims(
+    sim_results: list[tuple[Simulation, list[SimulationWaveResult]]],
+    baseline_sim_name: str,
+) -> Iterator[tuple[Simulation, list[SimulationWaveResult]]]:
+    baseline_sim, baseline_results = next(
+        (sim, results) for sim, results in sim_results if sim.name == baseline_sim_name
+    )
+
+    def baseline_value(sim: Simulation, result: SimulationWaveResult) -> float:
+        if sim == baseline_sim:
+            return 1.0
+        baseline = baseline_at_time(baseline_results, result.elapsed_time)
+        if baseline == 0:
+            return 1.0
+        else:
+            return result.value / baseline
+
+    for sim, results in sim_results:
+        normalized_results = []
+        for result in results:
+            value = baseline_value(sim, result)
+            normalized_results.append(
+                SimulationWaveResult(
+                    wave=result.wave, elapsed_time=result.elapsed_time, value=value
+                )
+            )
+        yield sim, normalized_results
+
+
+# Simulation config factories
+
+def make_sim(args: argparse.Namespace, max_waves: int = 0, tier: int = 1) -> Simulation:
+    return Simulation(
+        tier=tier,
+        max_waves=max_waves,
+        orb_kills=args.orb_kills,
+        coin=args.coin,
+        extra_orb=args.extra_orb,
+        critical_coin=args.critical_coin,
+        wave_skip=args.wave_skip,
+        intro_sprint=args.intro_sprint,
+        wave_accelerator=args.wave_accelerator,
+    )
+
+
+def tiers_sim(sim: Simulation, tier: int, max_wave: int) -> Simulation:
+    return dataclasses.replace(
+        sim,
+        name=f"T{tier}:W{max_wave}",
+        tier=tier,
+        max_waves=max_wave,
+    )
 
 
 def waves_sim(sim: Simulation, max_wave: int) -> Simulation:
-    interesting_waves = sim.interesting_waves | {sim.max_waves}
-    interesting_waves |= set(range(100, sim.max_waves + 1, 100))
     return dataclasses.replace(
         sim,
         name=f"{max_wave} waves",
         max_waves=max_wave,
-        interesting_waves=interesting_waves,
     )
 
 
 def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
-    interesting_waves = sim.interesting_waves | {sim.max_waves}
-    interesting_waves |= set(range(100, sim.max_waves + 1, 100))
-    sim = dataclasses.replace(
-        sim,
-        mastery=mastery,
-        interesting_waves=interesting_waves,
-    )
+    sim = dataclasses.replace(sim, mastery=mastery)
 
     if level is None:
         sim = dataclasses.replace(sim, name=f"{mastery}: locked")
@@ -363,61 +472,57 @@ def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
     elif mastery == "wave-skip":
         return dataclasses.replace(sim, wave_skip=level)
     elif mastery == "intro-sprint":
-        interesting_waves = sim.interesting_waves
-        interesting_waves.add(1)
-        interesting_waves.update(range(10, 101, 10))
-        interesting_waves.add(101)
-        for max_intro_wave in INTRO_SPRINT_MASTERY_TABLE:
-            interesting_waves.update(range(10, max_intro_wave + 1, 10))
-            interesting_waves.add(max_intro_wave + 1)
-        return dataclasses.replace(
-            sim,
-            interesting_waves=interesting_waves,
-            intro_sprint=level,
-        )
+        return dataclasses.replace(sim, intro_sprint=level)
     elif mastery == "wave-accelerator":
-        interesting_waves = sim.interesting_waves
-        for row in WAVE_ACCELERATOR_MASTERY_TABLE:
-            interesting_waves.update(row)
-        return dataclasses.replace(
-            sim,
-            interesting_waves=interesting_waves,
-            wave_accelerator=level,
-        )
+        return dataclasses.replace(sim, wave_accelerator=level)
     raise ValueError(f"Invalid mastery: {mastery}")
 
 
-def baseline_at_time(baseline_coins: dict[int, float], elapsed_time: float) -> float:
-    items = iter(baseline_coins.items())
+# Plotting
 
-    prev_time, prev_coins = next(items)
-    if elapsed_time <= prev_time:
-        return prev_coins
-
-    for curr_time, curr_coins in items:
-        if prev_time < elapsed_time <= curr_time:
-            lerp = (elapsed_time - prev_time) / (curr_time - prev_time)
-            return prev_coins + (curr_coins - prev_coins) * lerp
-        prev_time, prev_coins = curr_time, curr_coins
-
-    return curr_coins
+def interesting_waves(sim: Simulation) -> set[int]:
+    return {
+        1,
+        sim.max_waves,
+        *range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10),
+        *range(100, sim.max_waves + 1, 100),
+        *{max_intro_wave + 1 for max_intro_wave in [100, *INTRO_SPRINT_MASTERY_TABLE]},
+        *SPAWN_RATE_WAVES,
+        *{wave for row in WAVE_ACCELERATOR_MASTERY_TABLE for wave in row},
+    }
 
 
-def make_sim(args: argparse.Namespace, max_waves: int) -> Simulation:
-    return Simulation(
-        max_waves=max_waves,
-        orb_kills=args.orb_kills,
-        coin=args.coin,
-        extra_orb=args.extra_orb,
-        critical_coin=args.critical_coin,
-        wave_skip=args.wave_skip,
-        intro_sprint=args.intro_sprint,
-        wave_accelerator=args.wave_accelerator,
-    )
+def plot_sim_results(
+    title: str,
+    sim_results: list[tuple[Simulation, list[SimulationWaveResult]]],
+    truncate: bool = False,
+) -> Plot:
+    plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel="Coins")
+    for sim, results in sim_results:
+        line = PlotLine(name=sim.name, mastery=sim.mastery)
+        waves_to_plot = interesting_waves(sim)
+        for result in results:
+            if result.wave not in waves_to_plot:
+                continue
+            line.xs.append(result.elapsed_time)
+            line.ys.append(result.value)
+        plot.lines.append(line)
+
+    if truncate:
+        domain = min(line.xs[-1] for line in plot.lines)
+        for line in plot.lines:
+            idx = next((i for i, x in enumerate(line.xs) if x > domain), len(line.xs))
+            line.xs = line.xs[:idx]
+            line.ys = line.ys[:idx]
+
+    for line in plot.lines:
+        line.xs = [x / 3600 / GAME_SPEED for x in line.xs]
+
+    return plot
 
 
-def plot_results(plot: Plot, output: str | None = None):
-    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+def render_plot(plot: Plot, output: str | None = None):
+    _, ax = plt.subplots(1, 1, figsize=(12, 10))
 
     colors = list(mcolors.TABLEAU_COLORS.values())
     lowest_max = min(line.max()[1] for line in plot.lines)
@@ -442,6 +547,8 @@ def plot_results(plot: Plot, output: str | None = None):
 
     if plot.bottom is not None:
         ax.set_ylim(bottom=plot.bottom)
+    if plot.log_scale:
+        ax.set_yscale("log")
 
     ax.set_xlabel(plot.xlabel)
     ax.set_ylabel(plot.ylabel)
@@ -458,81 +565,17 @@ def plot_results(plot: Plot, output: str | None = None):
     plt.show()
 
 
-def plot_absolute_sim(sim: Simulation) -> PlotLine:
-    line = PlotLine(name=sim.name, mastery=sim.mastery)
-    for wave, elapsed_time, value in simulate_run(sim):
-        if wave not in sim.interesting_waves:
-            continue
-        line.xs.append(elapsed_time)
-        line.ys.append(value)
-    return line
-
-
-def plot_baseline_sim(sim: Simulation) -> PlotLine:
-    line = PlotLine(name=sim.name, mastery=sim.mastery)
-    for wave, elapsed_time, _ in simulate_run(sim):
-        if wave not in sim.interesting_waves:
-            continue
-        line.xs.append(elapsed_time)
-        line.ys.append(1.0)
-    return line
-
-
-def plot_relative_sim(sim: Simulation, baseline_coins: dict[int, float]) -> PlotLine:
-    line = PlotLine(name=sim.name, mastery=sim.mastery)
-    for wave, elapsed_time, value in simulate_run(sim):
-        if wave not in sim.interesting_waves:
-            continue
-        baseline = baseline_at_time(baseline_coins, elapsed_time)
-        if baseline == 0:
-            value = 1.0
-        else:
-            value /= baseline
-        line.xs.append(elapsed_time)
-        line.ys.append(value)
-    return line
-
-
-def plot_sims(
-    title: str,
-    sims: list[Simulation],
-    baseline_sim: Simulation | None = None,
-    baseline_coins: dict[int, float] | None = None,
-    truncate: bool = False,
-) -> Plot:
-    plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel="Coins")
-
-    if baseline_coins is None:
-        if baseline_sim is not None:
-            plot.lines.append(plot_absolute_sim(baseline_sim))
-        plot.lines += [plot_absolute_sim(sim) for sim in sims]
-    else:
-        plot.bottom = 0.99
-        if baseline_sim is not None:
-            plot.lines.append(plot_baseline_sim(baseline_sim))
-        plot.lines += [plot_relative_sim(sim, baseline_coins) for sim in sims]
-
-    if truncate:
-        domain = min(line.xs[-1] for line in plot.lines)
-        for line in plot.lines:
-            idx = next((i for i, x in enumerate(line.xs) if x > domain), len(line.xs))
-            line.xs = line.xs[:idx]
-            line.ys = line.ys[:idx]
-
-    for line in plot.lines:
-        line.xs = [x / 3600 / GAME_SPEED for x in line.xs]
-
-    return plot
-
+# Subcommand implementations
 
 def do_waves(args: argparse.Namespace) -> Plot:
+    args.mastery = None
     convert_mastery_args(args)
-
-    config = make_sim(args, args.waves[0])
+    config = make_sim(args)
 
     sims = [
         waves_sim(config, max_wave) for max_wave in sorted(args.waves, reverse=True)
     ]
+    sim_results = list(evaluate_sims(sims))
 
     title = ", ".join(
         [
@@ -540,28 +583,48 @@ def do_waves(args: argparse.Namespace) -> Plot:
             *mastery_args_description(args),
         ]
     )
-    return plot_sims(title, sims)
+    return plot_sim_results(title, sim_results)
+
+
+def do_tiers(args: argparse.Namespace) -> Plot:
+    args.mastery = None
+    convert_mastery_args(args)
+    args.tiers.sort()
+    config = make_sim(args)
+
+    sims = [tiers_sim(config, tier, wave) for tier, wave in args.tiers]
+    sim_results = list(evaluate_sims(sims))
+    if args.relative:
+        baseline_sim_name = max(sim_results, key=lambda x: x[1][-1].elapsed_time)[
+            0
+        ].name
+        sim_results = list(normalize_sims(sim_results, baseline_sim_name))
+
+    title = ", ".join(
+        [
+            f"Simulating tiers {', '.join(f'T{tier}:W{wave}' for tier, wave in args.tiers)}",
+            *relative_args_description(args),
+            *mastery_args_description(args),
+        ]
+    )
+    return plot_sim_results(title, sim_results)
 
 
 def do_compare(args: argparse.Namespace) -> Plot:
     args.level = mastery_level(args.level)
     convert_mastery_args(args)
-
     config = make_sim(args, args.wave)
 
-    baseline_sim = dataclasses.replace(
-        waves_sim(config, args.wave),
-        name="baseline",
-    )
-    baseline_coins = {
-        int(elapsed_time): cumulative_coins
-        for (wave, elapsed_time, cumulative_coins) in simulate_run(baseline_sim)
-    }
+    baseline_sim_name = "baseline"
+    baseline_sim = dataclasses.replace(config, name=baseline_sim_name)
 
-    sims = [
+    sims = [baseline_sim] + [
         mastery_sim(config, mastery, args.level)
         for mastery in MASTERY_DISPLAY_NAMES.keys()
     ]
+    sim_results = list(evaluate_sims(sims))
+    if args.relative:
+        sim_results = list(normalize_sims(sim_results, baseline_sim_name))
 
     title = ", ".join(
         [
@@ -570,30 +633,18 @@ def do_compare(args: argparse.Namespace) -> Plot:
             f"For {args.wave} waves",
         ]
     )
-    return plot_sims(
-        title,
-        sims,
-        baseline_sim,
-        baseline_coins if args.relative else None,
-        truncate=True,
-    )
+    return plot_sim_results(title, sim_results, truncate=True)
 
 
 def do_mastery(args: argparse.Namespace) -> Plot:
     convert_mastery_args(args)
-
     config = make_sim(args, args.wave)
 
-    baseline_sim = dataclasses.replace(
-        waves_sim(config, args.wave),
-        name="baseline",
-    )
-    baseline_coins = {
-        int(elapsed_time): cumulative_coins
-        for (wave, elapsed_time, cumulative_coins) in simulate_run(baseline_sim)
-    }
-
     sims = [mastery_sim(config, args.mastery, level) for level in MASTERY_LEVELS]
+    baseline_sim_name = sims[0].name
+    sim_results = list(evaluate_sims(sims))
+    if args.relative:
+        sim_results = list(normalize_sims(sim_results, baseline_sim_name))
 
     title = ", ".join(
         [
@@ -603,24 +654,39 @@ def do_mastery(args: argparse.Namespace) -> Plot:
             *mastery_args_description(args),
         ]
     )
-    return plot_sims(
-        title, sims, None, baseline_coins if args.relative else None, truncate=True
-    )
+    return plot_sim_results(title, sim_results, truncate=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="subcommand")
+
     # Simulate a sequence of waves with fixed mastery levels
     waves_subparser = subparsers.add_parser("waves")
     waves_subparser.add_argument(
-        "waves", type=int, nargs="+", help="Sequence of wave numbers to simulate"
+        "waves",
+        type=int,
+        nargs="+",
+        help="Sequence of wave numbers to simulate",
     )
     add_simulation_args(waves_subparser)
     add_mastery_args(waves_subparser)
 
+    # Simulate a sequence of tier/wave pairs with fixed mastery levels
+    tiers_subparser = subparsers.add_parser("tiers")
+    tiers_subparser.add_argument(
+        "tiers",
+        type=tier_and_wave_arg,
+        nargs="+",
+        help="Sequence of tier/wave pairs to simulate",
+    )
+    add_relative_args(tiers_subparser)
+    add_simulation_args(tiers_subparser)
+    add_mastery_args(tiers_subparser)
+
     # Compare all masteries at a single level
     compare_subparser = subparsers.add_parser("compare")
+    add_wave_args(compare_subparser)
     add_relative_args(compare_subparser)
     compare_subparser.add_argument(
         "--level",
@@ -634,12 +700,13 @@ if __name__ == "__main__":
 
     # Compare all levels of a single mastery
     mastery_subparser = subparsers.add_parser("mastery")
-    add_relative_args(mastery_subparser)
+    add_wave_args(mastery_subparser)
     mastery_subparser.add_argument(
         "mastery",
         choices=MASTERY_DISPLAY_NAMES.keys(),
         help="Compare all mastery levels of this mastery",
     )
+    add_relative_args(mastery_subparser)
     add_simulation_args(mastery_subparser)
     add_mastery_args(mastery_subparser)
 
@@ -650,10 +717,12 @@ if __name__ == "__main__":
 
     if args.subcommand == "waves":
         plot = do_waves(args)
+    elif args.subcommand == "tiers":
+        plot = do_tiers(args)
     elif args.subcommand == "compare":
         plot = do_compare(args)
     elif args.subcommand == "mastery":
         plot = do_mastery(args)
     else:
         parser.error(f"Invalid subcommand: {args.subcommand}")
-    plot_results(plot, output=args.output)
+    render_plot(plot, output=args.output)
