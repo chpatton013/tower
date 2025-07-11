@@ -132,18 +132,20 @@ class SimulationWaveResult:
 
 
 @dataclasses.dataclass
+class SimulationRunResult:
+    wave_results: list[SimulationWaveResult]
+    relative: float | None = None
+    roi: float | None = None
+
+
+@dataclasses.dataclass
 class PlotLine:
     name: str
     mastery: str | None = None
     xs: list[float] = dataclasses.field(default_factory=list)
     ys: list[float] = dataclasses.field(default_factory=list)
-
-    def max(self) -> tuple[float, float]:
-        max_y_idx = self.ys.index(max(self.ys))
-        return (self.xs[max_y_idx], self.ys[max_y_idx])
-
-    def last(self) -> tuple[float, float]:
-        return (self.xs[-1], self.ys[-1])
+    relative: float | None = None
+    roi: float | None = None
 
 
 @dataclasses.dataclass
@@ -171,7 +173,7 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         help="Average portion of kills to orbs [0.0-1.0]",
     )
     parser.add_argument(
-        "--log",
+        "--log-scale",
         action="store_true",
         default=False,
         help="Render results on a log scale",
@@ -367,25 +369,25 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
 def evaluate_sims(
     sims: list[Simulation],
-) -> Iterator[tuple[Simulation, list[SimulationWaveResult]]]:
+) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     for sim in sims:
-        yield sim, list(simulate_run(sim))
+        yield sim, SimulationRunResult(wave_results=list(simulate_run(sim)))
 
 
 # Data normalization
 
 def baseline_at_time(
-    baseline_results: list[SimulationWaveResult], elapsed_time: float
+    baseline_results: SimulationRunResult, elapsed_time: float
 ) -> float:
     index = bisect.bisect_left(
-        baseline_results, elapsed_time, key=lambda x: x.elapsed_time
+        baseline_results.wave_results, elapsed_time, key=lambda x: x.elapsed_time
     )
     if index == 0:
-        return baseline_results[0].value
-    if index == len(baseline_results):
-        return baseline_results[-1].value
-    lower_result = baseline_results[index - 1]
-    higher_result = baseline_results[index]
+        return baseline_results.wave_results[0].value
+    if index == len(baseline_results.wave_results):
+        return baseline_results.wave_results[-1].value
+    lower_result = baseline_results.wave_results[index - 1]
+    higher_result = baseline_results.wave_results[index]
     assert higher_result.elapsed_time - lower_result.elapsed_time != 0
     lerp = (elapsed_time - lower_result.elapsed_time) / (
         higher_result.elapsed_time - lower_result.elapsed_time
@@ -393,33 +395,61 @@ def baseline_at_time(
     return lower_result.value + (higher_result.value - lower_result.value) * lerp
 
 
-def normalize_sims(
-    sim_results: list[tuple[Simulation, list[SimulationWaveResult]]],
+def normalize_sims_vs_baseline(
+    sim_results: list[tuple[Simulation, SimulationRunResult]],
     baseline_sim_name: str,
-) -> Iterator[tuple[Simulation, list[SimulationWaveResult]]]:
+) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     baseline_sim, baseline_results = next(
-        (sim, results) for sim, results in sim_results if sim.name == baseline_sim_name
+        (sim, run_result) for sim, run_result in sim_results if sim.name == baseline_sim_name
     )
 
-    def baseline_value(sim: Simulation, result: SimulationWaveResult) -> float:
+    def baseline_value(sim: Simulation, wave_result: SimulationWaveResult) -> float:
         if sim == baseline_sim:
             return 1.0
-        baseline = baseline_at_time(baseline_results, result.elapsed_time)
+        baseline = baseline_at_time(baseline_results, wave_result.elapsed_time)
         if baseline == 0:
             return 1.0
         else:
-            return result.value / baseline
+            return wave_result.value / baseline
 
-    for sim, results in sim_results:
+    for sim, run_result in sim_results:
         normalized_results = []
-        for result in results:
-            value = baseline_value(sim, result)
+        value = 1.0
+        for wave_result in run_result.wave_results:
+            value = baseline_value(sim, wave_result)
             normalized_results.append(
                 SimulationWaveResult(
-                    wave=result.wave, elapsed_time=result.elapsed_time, value=value
+                    wave=wave_result.wave,
+                    elapsed_time=wave_result.elapsed_time,
+                    value=value,
                 )
             )
-        yield sim, normalized_results
+        yield sim, dataclasses.replace(
+            run_result, wave_results=normalized_results, relative=value
+        )
+
+
+def normalize_sims_vs_stone_cost(
+    sim_results: list[tuple[Simulation, SimulationRunResult]],
+) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    for sim, run_result in sim_results:
+        if sim.mastery is None:
+            continue
+
+        normalized_results = []
+        value = 0.0
+        for wave_result in run_result.wave_results:
+            value = (wave_result.value - 1) / MASTERY_STONE_COSTS[sim.mastery]
+            normalized_results.append(
+                SimulationWaveResult(
+                    wave=wave_result.wave,
+                    elapsed_time=wave_result.elapsed_time,
+                    value=value,
+                )
+            )
+        yield sim, dataclasses.replace(
+            run_result, wave_results=normalized_results, roi=value
+        )
 
 
 # Simulation config factories
@@ -494,18 +524,23 @@ def interesting_waves(sim: Simulation) -> set[int]:
 
 def plot_sim_results(
     title: str,
-    sim_results: list[tuple[Simulation, list[SimulationWaveResult]]],
+    sim_results: list[tuple[Simulation, SimulationRunResult]],
     truncate: bool = False,
 ) -> Plot:
     plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel="Coins")
-    for sim, results in sim_results:
-        line = PlotLine(name=sim.name, mastery=sim.mastery)
+    for sim, run_result in sim_results:
+        line = PlotLine(
+            name=sim.name,
+            mastery=sim.mastery,
+            relative=run_result.relative,
+            roi=run_result.roi,
+        )
         waves_to_plot = interesting_waves(sim)
-        for result in results:
-            if result.wave not in waves_to_plot:
+        for wave_result in run_result.wave_results:
+            if wave_result.wave not in waves_to_plot:
                 continue
-            line.xs.append(result.elapsed_time)
-            line.ys.append(result.value)
+            line.xs.append(wave_result.elapsed_time)
+            line.ys.append(wave_result.value)
         plot.lines.append(line)
 
     if truncate:
@@ -525,16 +560,14 @@ def render_plot(plot: Plot, output: str | None = None):
     _, ax = plt.subplots(1, 1, figsize=(12, 10))
 
     colors = list(mcolors.TABLEAU_COLORS.values())
-    lowest_max = min(line.max()[1] for line in plot.lines)
 
     for i, line in enumerate(plot.lines):
         label = f"{line.name}"
-        if lowest_max != 0:
-            relative = (line.last()[1] / lowest_max) - 1
+        if line.relative is not None:
+            relative = (line.relative - 1)
             label += f"\n({relative:+.2%})"
-        if line.mastery is not None:
-            roi = relative / MASTERY_STONE_COSTS[line.mastery]
-            label += f"\n[{roi:.5%}/stone]"
+        if line.roi is not None:
+            label += f"\n[{line.roi:.5%}/stone]"
         ax.plot(
             line.xs,
             line.ys,
@@ -583,7 +616,9 @@ def do_waves(args: argparse.Namespace) -> Plot:
             *mastery_args_description(args),
         ]
     )
-    return plot_sim_results(title, sim_results)
+    plot = plot_sim_results(title, sim_results)
+    plot.log_scale = args.log_scale
+    return plot
 
 
 def do_tiers(args: argparse.Namespace) -> Plot:
@@ -595,10 +630,9 @@ def do_tiers(args: argparse.Namespace) -> Plot:
     sims = [tiers_sim(config, tier, wave) for tier, wave in args.tiers]
     sim_results = list(evaluate_sims(sims))
     if args.relative:
-        baseline_sim_name = max(sim_results, key=lambda x: x[1][-1].elapsed_time)[
-            0
-        ].name
-        sim_results = list(normalize_sims(sim_results, baseline_sim_name))
+        baseline_sim_result = max(sim_results, key=lambda x: x[1].wave_results[-1].elapsed_time)
+        baseline_sim_name = baseline_sim_result[0].name
+        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
 
     title = ", ".join(
         [
@@ -607,7 +641,11 @@ def do_tiers(args: argparse.Namespace) -> Plot:
             *mastery_args_description(args),
         ]
     )
-    return plot_sim_results(title, sim_results)
+    plot = plot_sim_results(title, sim_results)
+    plot.log_scale = args.log_scale
+    if args.relative:
+        plot.bottom = 0.99
+    return plot
 
 
 def do_compare(args: argparse.Namespace) -> Plot:
@@ -624,7 +662,9 @@ def do_compare(args: argparse.Namespace) -> Plot:
     ]
     sim_results = list(evaluate_sims(sims))
     if args.relative:
-        sim_results = list(normalize_sims(sim_results, baseline_sim_name))
+        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
+        if args.roi:
+            sim_results = list(normalize_sims_vs_stone_cost(sim_results))
 
     title = ", ".join(
         [
@@ -633,7 +673,11 @@ def do_compare(args: argparse.Namespace) -> Plot:
             f"For {args.wave} waves",
         ]
     )
-    return plot_sim_results(title, sim_results, truncate=True)
+    plot = plot_sim_results(title, sim_results, truncate=True)
+    plot.log_scale = args.log_scale
+    if args.relative and not args.roi:
+        plot.bottom = 0.99
+    return plot
 
 
 def do_mastery(args: argparse.Namespace) -> Plot:
@@ -644,7 +688,7 @@ def do_mastery(args: argparse.Namespace) -> Plot:
     baseline_sim_name = sims[0].name
     sim_results = list(evaluate_sims(sims))
     if args.relative:
-        sim_results = list(normalize_sims(sim_results, baseline_sim_name))
+        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
 
     title = ", ".join(
         [
@@ -654,7 +698,11 @@ def do_mastery(args: argparse.Namespace) -> Plot:
             *mastery_args_description(args),
         ]
     )
-    return plot_sim_results(title, sim_results, truncate=True)
+    plot = plot_sim_results(title, sim_results, truncate=True)
+    plot.log_scale = args.log_scale
+    if args.relative:
+        plot.bottom = 0.99
+    return plot
 
 
 if __name__ == "__main__":
@@ -694,6 +742,11 @@ if __name__ == "__main__":
         choices=MASTERY_LEVEL_NAMES,
         default="1",
         help="Compare all masteries at this level",
+    )
+    compare_subparser.add_argument(
+        "--roi",
+        action="store_true",
+        help="Normalize all results against stone cost",
     )
     add_simulation_args(compare_subparser)
     add_mastery_args(compare_subparser)
