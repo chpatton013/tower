@@ -90,6 +90,7 @@ MASTERY_STONE_COSTS = {
 class Simulation:
     name: str = ""
     mastery: str | None = None
+    level: int | None = None
     tier: int = 1
     max_waves: int = 0
     orb_kills: float = 1.0
@@ -268,9 +269,9 @@ def add_wave_args(parser: argparse.ArgumentParser):
     parser.add_argument("wave", type=int, help="Wave number to simulate")
 
 
-def relative_args_description(args: argparse.Namespace) -> list[str]:
+def relative_args_description(args: argparse.Namespace, baseline_sim_name: str) -> list[str]:
     if args.relative:
-        return ["Relative to baseline"]
+        return [f"Relative to {baseline_sim_name}"]
     else:
         return ["Absolute coins"]
 
@@ -414,6 +415,18 @@ def annotate_sims_vs_min(
         yield sim, dataclasses.replace(run_result, relative=value)
 
 
+def annotate_sims_vs_stone_cost(
+    sim_results: list[tuple[Simulation, SimulationRunResult]],
+) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    for sim, run_result in sim_results:
+        if run_result.relative is None or sim.mastery is None:
+            yield sim, run_result
+            continue
+
+        value = run_result.relative / MASTERY_STONE_COSTS[sim.mastery]
+        yield sim, dataclasses.replace(run_result, roi=value)
+
+
 def normalize_sims_vs_baseline(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
     baseline_sim_name: str,
@@ -505,7 +518,7 @@ def waves_sim(sim: Simulation, max_wave: int) -> Simulation:
 
 
 def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
-    sim = dataclasses.replace(sim, mastery=mastery)
+    sim = dataclasses.replace(sim, mastery=mastery, level=level)
 
     if level is None:
         sim = dataclasses.replace(sim, name=f"{mastery}: locked")
@@ -645,7 +658,7 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
     title = ", ".join(
         [
             f"Simulating tiers {', '.join(f'T{tier}:W{wave}' for tier, wave in args.tiers)}",
-            *relative_args_description(args),
+            *relative_args_description(args, "minimum"),
             *mastery_args_description(args),
         ]
     )
@@ -672,13 +685,18 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
         sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
         if args.roi:
             sim_results = list(normalize_sims_vs_stone_cost(sim_results))
+        else:
+            sim_results = list(annotate_sims_vs_stone_cost(sim_results))
     else:
         sim_results = list(annotate_sims_vs_min(sim_results))
+
+
+        sim_results = list(annotate_sims_vs_stone_cost(sim_results))
 
     title = ", ".join(
         [
             f"Comparing masteries at level {args.level}",
-            *relative_args_description(args),
+            *relative_args_description(args, baseline_sim_name),
             f"For {args.wave} waves",
         ]
     )
@@ -694,18 +712,19 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     config = make_sim(args, args.wave)
 
     sims = [mastery_sim(config, args.mastery, level) for level in MASTERY_LEVELS]
-    baseline_sim_name = sims[0].name
+    baseline_sim = sims[0]
     sim_results = list(evaluate_sims(sims))
     sim_results = list(truncate_sims_to_shortest(sim_results))
     if args.relative:
-        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
+        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim.name))
     else:
         sim_results = list(annotate_sims_vs_min(sim_results))
 
+    relative_to = "locked" if baseline_sim.level is None else f"level {baseline_sim.level}"
     title = ", ".join(
         [
             f"Comparing {MASTERY_DISPLAY_NAMES[args.mastery]}# levels",
-            *relative_args_description(args),
+            *relative_args_description(args, relative_to),
             f"For {args.wave} waves",
             *mastery_args_description(args),
         ]
