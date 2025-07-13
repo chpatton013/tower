@@ -21,7 +21,7 @@ Compare cumulative coin earnings for card masteries in The Tower.
 
 ```
 ./mastery_calc.py waves WAVES [ WAVES [ WAVES... ] ] \
-    [ --orb-kills=ORB_KILL_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
+    [ --orb-hits=ORB_HIT_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
     [ MASTERY_OPTIONS ]
 ```
 
@@ -30,7 +30,7 @@ Compare cumulative coin earnings for card masteries in The Tower.
 ```
 ./mastery_calc.py compare \
     [ (--relative|-r) ] [ (--level|-l)=MASTERIES_LEVEL ] \
-    [ --orb-kills=ORB_KILL_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
+    [ --orb-hits=ORB_HIT_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
     [ MASTERY_OPTIONS ]
 ```
 
@@ -39,7 +39,7 @@ Compare cumulative coin earnings for card masteries in The Tower.
 ```
 ./mastery_calc.py mastery \
     [ (--relative|-r) ] MASTERY_NAME \
-    [ --orb-kills=ORB_KILL_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
+    [ --orb-hits=ORB_HIT_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
     [ MASTERY_OPTIONS ]
 ```
 
@@ -62,9 +62,9 @@ each option is `locked` if not specified.
 ## Examples
 
 ```bash
-# Compare cumulative earnings from different length runs with a custom orb-kill
+# Compare cumulative earnings from different length runs with a custom orb-hit
 # guess. Render the result to a PNG file.
-./mastery_calc.py waves 2000 4000 8000 --orb-kills=0.3 -o longer-runs.png
+./mastery_calc.py waves 2000 4000 8000 --orb-hits=0.8 -o longer-runs.png
 
 # Compare cumulative earnings from each mastery at level 2 against a baseline of
 # no masteries over a 10k wave run. Show results relative to the baseline.

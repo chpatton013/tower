@@ -4,8 +4,10 @@ import bisect
 import argparse
 import dataclasses
 from typing import Iterator
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import sciform
 
 
 # Global constants
@@ -18,6 +20,14 @@ WAVE_SKIP_CHANCE = 0.19
 WAVE_SKIP_COIN_BONUS = 1.10
 
 TIER_COIN_BONUS = [1.0, 1.8, 2.6, 3.4, 4.2, 5.0, 5.8, 6.6, 7.5, 8.7, 10.3, 12.2, 14.7, 17.6, 21.3, 25.2, 29.1, 33.0]
+TIER_CELL_DROP_MIN = [*([1] * 13), 7, 11, 12, 12, 12]
+assert len(TIER_COIN_BONUS) == len(TIER_CELL_DROP_MIN)
+TIER_CELL_DROP_MAX = [*range(1, 14), 14, 15, 16, 17, 18]
+assert len(TIER_COIN_BONUS) == len(TIER_CELL_DROP_MAX)
+TIER_REROLL_DROP = [1, 2, 3, 4, 6, 8, 12, 18, 25, 32, 40, 45, 50, 55, 60, 65, 70, 75]
+assert len(TIER_COIN_BONUS) == len(TIER_REROLL_DROP)
+TIER_BOSS_PERIOD = [*([10] * 13), 9, 8, 7, 6, 5]
+assert len(TIER_COIN_BONUS) == len(TIER_BOSS_PERIOD)
 
 SPAWN_RATE_SEQUENCE = [10, 11, 13, 15, 17, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 37, 39, 40, 42, 44, 46, 48, 49, 50, 52, 54, 56]
 SPAWN_RATE_WAVES = [1, 3, 6, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500]
@@ -43,12 +53,67 @@ COIN_DROP_TABLE = {
     "protector": 3.0,
 }
 assert sorted(COIN_DROP_TABLE.keys()) == sorted(SPAWN_CHANCE_TABLE.keys())
+COIN_DROP_TABLE["scatter"] = 4.0
+COIN_DROP_TABLE["vampire"] = 4.0
+COIN_DROP_TABLE["ray"] = 4.0
+COIN_DROP_TABLE["boss"] = 0.0
 
+ELITE_SPAWN_CHANCE_TABLE = [0.0000, 0.0033, 0.0133, 0.0300, 0.0500, 0.0800, 0.1200, 0.1600, 0.2100, 0.2700, 0.3300]
+ELITE_SINGLE_SPAWN_WAVES_TABLE = [
+    [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000],
+    [0, 450, 900, 1350, 1800, 2700, 3600, 4500, 5400, 6300, 7200],
+    [0, 405, 810, 1215, 1620, 2430, 3240, 4050, 4860, 5670, 6480],
+    [0, 365, 729, 1094, 1458, 2187, 2916, 3645, 4374, 5103, 5832],
+    [0, 328, 656, 984, 1312, 1968, 2624, 3281, 3937, 4593, 5249],
+    [0, 295, 590, 886, 1181, 1771, 2362, 2952, 3543, 4133, 4724],
+    [0, 266, 531, 797, 1063, 1594, 2126, 2657, 3189, 3720, 4252],
+    [0, 239, 478, 717, 957, 1435, 1913, 2391, 2870, 3348, 3826],
+    [0, 215, 430, 646, 861, 1291, 1722, 2152, 2583, 3013, 3444],
+    [0, 194, 387, 581, 775, 1162, 1550, 1937, 2325, 2712, 3099],
+    [0, 174, 349, 523, 697, 1046, 1395, 1743, 2092, 2441, 2789],
+    [0, 157, 314, 471, 628, 941, 1255, 1569, 1883, 2197, 2510],
+    [0, 141, 282, 424, 565, 847, 1130, 1412, 1695, 1977, 2259],
+    [0, 127, 254, 381, 508, 763, 1017, 1271, 1525, 1779, 2033],
+    [0, 114, 229, 343, 458, 686, 915, 1144, 1373, 1601, 1830],
+    [0, 41, 102, 205, 308, 411, 617, 823, 1029, 1235, 1441],
+    [0, 37, 92, 185, 277, 370, 555, 741, 926, 1111, 1297],
+    [0, 33, 83, 166, 250, 333, 500, 667, 833, 1000, 1167],
+]
+assert all(len(row) == len(ELITE_SPAWN_CHANCE_TABLE) for row in ELITE_SINGLE_SPAWN_WAVES_TABLE)
+ELITE_DOUBLE_SPAWN_WAVES_TABLE = [
+    [0, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000],
+    [0, 7200, 8100, 9000, 9900, 10800, 11700, 12600, 13500, 14400, 15300],
+    [0, 6480, 7290, 8100, 8910, 9720, 10530, 11340, 12150, 12960, 13770],
+    [0, 5832, 6561, 7290, 8019, 8748, 9477, 10206, 10935, 11664, 12393],
+    [0, 5249, 5905, 6561, 7217, 7873, 8529, 9185, 9841, 10497, 11153],
+    [0, 4724, 5314, 5905, 6495, 7086, 7676, 8267, 8857, 9448, 10038],
+    [0, 4252, 4783, 5314, 5846, 6377, 6909, 7440, 7972, 8503, 9034],
+    [0, 3826, 4305, 4783, 5261, 5740, 6218, 6696, 7174, 7653, 8131],
+    [0, 3444, 3874, 4305, 4735, 5166, 5596, 6027, 6457, 6887, 7318],
+    [0, 3099, 3487, 3874, 4262, 4649, 5036, 5424, 5811, 6199, 6586],
+    [0, 2789, 3138, 3487, 3835, 4184, 4533, 4881, 5230, 5579, 5928],
+    [0, 2510, 2824, 3138, 3452, 3766, 4080, 4394, 4708, 5022, 5336],
+    [0, 2259, 2542, 2824, 3107, 3389, 3672, 3954, 4236, 4519, 4801],
+    [0, 2033, 2288, 2542, 2796, 3050, 3304, 3559, 3813, 4067, 4321],
+    [0, 1830, 2059, 2288, 2516, 2745, 2974, 3203, 3432, 3660, 3889],
+    [0, 1441, 1647, 1853, 2058, 2264, 2470, 2676, 2882, 3088, 3294],
+    [0, 1297, 1482, 1667, 1853, 2038, 2223, 2408, 2594, 2779, 2964],
+    [0, 1167, 1334, 1500, 1667, 1834, 2001, 2168, 2334, 2501, 2668],
+]
+assert all(len(row) == len(ELITE_SPAWN_CHANCE_TABLE) for row in ELITE_DOUBLE_SPAWN_WAVES_TABLE)
+assert len(ELITE_SINGLE_SPAWN_WAVES_TABLE) == len(ELITE_DOUBLE_SPAWN_WAVES_TABLE)
+
+REROLL_SHARD_DROP_CHANCE = 0.15
+COMMON_MODULE_DROP_CHANCE = 0.03
+RARE_MODULE_DROP_CHANCE = 0.015
+
+CASH_MASTERY_TABLE = [0.004, 0.008, 0.012, 0.016, 0.020, 0.024, 0.028, 0.032, 0.036, 0.040]
 COIN_MASTERY_TABLE = [1.03, 1.06, 1.09, 1.12, 1.15, 1.18, 1.21, 1.24, 1.27, 1.30]
-EXTRA_ORB_MASTERY_TABLE = [1.04, 1.08, 1.12, 1.16, 1.20, 1.24, 1.28, 1.32, 1.36, 1.40]
 CRITICAL_COIN_MASTERY_TABLE = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-WAVE_SKIP_MASTERY_TABLE = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
+ENEMY_BALANCE_MASTERY_TABLE = [0.06, 0.12, 0.18, 0.24, 0.30, 0.36, 0.42, 0.48, 0.54, 0.60]
+EXTRA_ORB_MASTERY_TABLE = [1.04, 1.08, 1.12, 1.16, 1.20, 1.24, 1.28, 1.32, 1.36, 1.40]
 INTRO_SPRINT_MASTERY_TABLE = [180, 360, 540, 720, 900, 1080, 1260, 1440, 1620, 1800]
+RECOVERY_PACKAGE_CHANCE_MASTERY_TABLE = [0.004, 0.008, 0.012, 0.016, 0.020, 0.024, 0.028, 0.032, 0.036, 0.040]
 WAVE_ACCELERATOR_MASTERY_TABLE = [
     [1, 3, 5, 18, 36, 55, 73, 91, 136, 182, 227, 273, 364, 545, 727, 909, 1364, 1818, 2273, 2727, 3182, 3636, 4091, 4545, 5000, 5455, 5909],
     [1, 3, 5, 17, 33, 50, 67, 83, 125, 167, 208, 250, 333, 500, 667, 833, 1250, 1667, 2083, 2500, 2917, 3333, 3750, 4167, 4583, 5000, 5417],
@@ -62,11 +127,13 @@ WAVE_ACCELERATOR_MASTERY_TABLE = [
     [1, 2, 3, 10, 20, 30, 40, 50, 75, 100, 125, 150, 200, 300, 400, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250]
 ]
 assert all(len(row) == len(SPAWN_RATE_SEQUENCE) for row in WAVE_ACCELERATOR_MASTERY_TABLE)
+WAVE_SKIP_MASTERY_TABLE = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
 
 MASTERY_LEVELS = [None, *range(0, 10)]
 MASTERY_LEVEL_NAMES = [str(x) for x in range(0, 10)]
 MASTERY_DISPLAY_NAMES = {
     "coin": "Coin",
+    "enemy-balance": "EB",
     "extra-orb": "EO",
     "critical-coin": "CritCoin",
     "wave-skip": "WS",
@@ -75,6 +142,7 @@ MASTERY_DISPLAY_NAMES = {
 }
 MASTERY_STONE_COSTS = {
     "coin": 1250,
+    "enemy-balance": 1000,
     "extra-orb": 750,
     "critical-coin": 1000,
     "wave-skip": 1000,
@@ -86,6 +154,7 @@ MASTERY_STONE_COSTS = {
 
 # Data types
 
+
 @dataclasses.dataclass
 class Simulation:
     name: str = ""
@@ -93,13 +162,19 @@ class Simulation:
     level: int | None = None
     tier: int = 1
     max_waves: int = 0
-    orb_kills: float = 1.0
+    orb_hits: float = 1.0
+    free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
+    enemy_level_skip_chances: dict[str, float] = dataclasses.field(default_factory=dict)
+    recovery_package_chance: float = 0.0
+    cash: int | None = None
     coin: int | None = None
-    extra_orb: int | None = None
     critical_coin: int | None = None
-    wave_skip: int | None = None
+    enemy_balance: int | None = None
+    extra_orb: int | None = None
     intro_sprint: int | None = None
+    recovery_package: int | None = None
     wave_accelerator: int | None = None
+    wave_skip: int | None = None
 
     def max_intro_wave(self) -> int:
         return (
@@ -123,6 +198,24 @@ class Simulation:
             0 <= index < len(SPAWN_RATE_SEQUENCE)
         ), f"Invalid spawn rate index: {index}"
         return index
+
+
+@dataclasses.dataclass
+class Events:
+    wave_skip: float
+    free_upgrades: dict[str, float]
+    recovery_packages: float
+    enemy_level_skips: dict[str, float]
+    enemies: dict[str, float]
+
+
+@dataclasses.dataclass
+class Rewards:
+    coins: float
+    elite_cells: float
+    reroll_shards: float
+    common_modules: float
+    rare_modules: float
 
 
 @dataclasses.dataclass
@@ -161,17 +254,28 @@ class Plot:
 
 # Argument handling
 
+
 def tier_and_wave_arg(arg: str) -> tuple[int, int]:
     tier, _, wave = arg.partition(":")
     return int(tier), int(wave)
 
 
+def add_tier_args(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "--tier",
+        type=int,
+        choices=range(1, 19),
+        default=1,
+        help="Tier to simulate",
+    )
+
+
 def add_simulation_args(parser: argparse.ArgumentParser):
     parser.add_argument(
-        "--orb-kills",
+        "--orb-hits",
         type=float,
         default=1.0,
-        help="Average portion of kills to orbs [0.0-1.0]",
+        help="Average portion of enemies hit by orbs [0.0-1.0]",
     )
     parser.add_argument(
         "--log-scale",
@@ -184,16 +288,16 @@ def add_simulation_args(parser: argparse.ArgumentParser):
 
 def add_mastery_args(parser: argparse.ArgumentParser):
     parser.add_argument(
+        "--cash",
+        choices=["locked", *MASTERY_LEVEL_NAMES],
+        default=None,
+        help="Cash mastery level",
+    )
+    parser.add_argument(
         "--coin",
         choices=["locked", *MASTERY_LEVEL_NAMES],
         default=None,
         help="Coin mastery level",
-    )
-    parser.add_argument(
-        "--extra-orb",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
-        default=None,
-        help="Extra orb mastery level",
     )
     parser.add_argument(
         "--critical-coin",
@@ -202,10 +306,22 @@ def add_mastery_args(parser: argparse.ArgumentParser):
         help="Critical coin mastery level",
     )
     parser.add_argument(
-        "--wave-skip",
+        "--enemy-balance",
         choices=["locked", *MASTERY_LEVEL_NAMES],
         default=None,
-        help="Wave skip mastery level",
+        help="Enemy balance mastery level",
+    )
+    parser.add_argument(
+        "--extra-orb",
+        choices=["locked", *MASTERY_LEVEL_NAMES],
+        default=None,
+        help="Extra orb mastery level",
+    )
+    parser.add_argument(
+        "--recovery-package",
+        choices=["locked", *MASTERY_LEVEL_NAMES],
+        default=None,
+        help="Recovery package mastery level",
     )
     parser.add_argument(
         "--intro-sprint",
@@ -219,6 +335,12 @@ def add_mastery_args(parser: argparse.ArgumentParser):
         default=None,
         help="Wave accelerator mastery level",
     )
+    parser.add_argument(
+        "--wave-skip",
+        choices=["locked", *MASTERY_LEVEL_NAMES],
+        default=None,
+        help="Wave skip mastery level",
+    )
 
 
 def mastery_level(name: str | None) -> int | None:
@@ -230,28 +352,41 @@ def mastery_level(name: str | None) -> int | None:
 
 
 def convert_mastery_args(args: argparse.Namespace) -> None:
+    args.cash = mastery_level(args.cash)
     args.coin = mastery_level(args.coin)
-    args.extra_orb = mastery_level(args.extra_orb)
     args.critical_coin = mastery_level(args.critical_coin)
-    args.wave_skip = mastery_level(args.wave_skip)
+    args.enemy_balance = mastery_level(args.enemy_balance)
+    args.extra_orb = mastery_level(args.extra_orb)
     args.intro_sprint = mastery_level(args.intro_sprint)
+    args.recovery_package = mastery_level(args.recovery_package)
     args.wave_accelerator = mastery_level(args.wave_accelerator)
+    args.wave_skip = mastery_level(args.wave_skip)
 
 
 def mastery_args_description(args: argparse.Namespace) -> list[str]:
     desc = []
+    if args.cash and args.mastery != "cash":
+        desc.append(f"{MASTERY_DISPLAY_NAMES['cash']}#{args.cash}")
     if args.coin and args.mastery != "coin":
-        desc.append(f"Coin#{args.coin}")
-    if args.extra_orb and args.mastery != "extra-orb":
-        desc.append(f"EO#{args.extra_orb}")
+        desc.append(f"{MASTERY_DISPLAY_NAMES['coin']}#{args.coin}")
     if args.critical_coin and args.mastery != "critical-coin":
-        desc.append(f"CritCoin#{args.critical_coin}")
-    if args.wave_skip and args.mastery != "wave-skip":
-        desc.append(f"WS#{args.wave_skip}")
+        desc.append(f"{MASTERY_DISPLAY_NAMES['critical-coin']}#{args.critical_coin}")
+    if args.enemy_balance and args.mastery != "enemy-balance":
+        desc.append(f"{MASTERY_DISPLAY_NAMES['enemy-balance']}#{args.enemy_balance}")
+    if args.extra_orb and args.mastery != "extra-orb":
+        desc.append(f"{MASTERY_DISPLAY_NAMES['extra-orb']}#{args.extra_orb}")
     if args.intro_sprint and args.mastery != "intro-sprint":
-        desc.append(f"IS#{args.intro_sprint}")
+        desc.append(f"{MASTERY_DISPLAY_NAMES['intro-sprint']}#{args.intro_sprint}")
+    if args.recovery_package and args.mastery != "recovery-package":
+        desc.append(
+            f"{MASTERY_DISPLAY_NAMES['recovery-package']}#{args.recovery_package}"
+        )
     if args.wave_accelerator and args.mastery != "wave-accelerator":
-        desc.append(f"WA#{args.wave_accelerator}")
+        desc.append(
+            f"{MASTERY_DISPLAY_NAMES['wave-accelerator']}#{args.wave_accelerator}"
+        )
+    if args.wave_skip and args.mastery != "wave-skip":
+        desc.append(f"{MASTERY_DISPLAY_NAMES['wave-skip']}#{args.wave_skip}")
     return desc
 
 
@@ -269,7 +404,9 @@ def add_wave_args(parser: argparse.ArgumentParser):
     parser.add_argument("wave", type=int, help="Wave number to simulate")
 
 
-def relative_args_description(args: argparse.Namespace, baseline_sim_name: str) -> list[str]:
+def relative_args_description(
+    args: argparse.Namespace, baseline_sim_name: str
+) -> list[str]:
     if args.relative:
         return [f"Relative to {baseline_sim_name}"]
     else:
@@ -278,32 +415,112 @@ def relative_args_description(args: argparse.Namespace, baseline_sim_name: str) 
 
 # Simulation logic
 
-def simulate_wave(sim: Simulation, wave: int) -> float:
+
+def elite_spawn_count(sim: Simulation, wave: int) -> float:
+    def index(table: list[int], value: int) -> int:
+        return bisect.bisect(table, value, hi=len(table) - 1)
+
+    single_index = index(ELITE_SINGLE_SPAWN_WAVES_TABLE[sim.tier - 1], wave)
+    double_index = index(ELITE_DOUBLE_SPAWN_WAVES_TABLE[sim.tier - 1], wave)
+    single_chance = ELITE_SPAWN_CHANCE_TABLE[single_index]
+    double_chance = ELITE_SPAWN_CHANCE_TABLE[double_index]
+    combined_chance = single_chance * (1.0 + double_chance)
+    double_spawn = (
+        0.0
+        if sim.enemy_balance is None
+        else ENEMY_BALANCE_MASTERY_TABLE[sim.enemy_balance]
+    )
+    return combined_chance * (1.0 + double_spawn)
+
+
+def simulate_wave(sim: Simulation, wave: int) -> Events:
     spawn_rate_index = sim.spawn_rate_index(wave)
     spawn_rate = SPAWN_RATE_SEQUENCE[spawn_rate_index]
+    common_spawns = spawn_rate * WAVE_DURATION * 8
+    elite_spawns = elite_spawn_count(sim, wave)
 
-    avg_spawn_count = spawn_rate * WAVE_DURATION * 8
-    avg_spawn = {
-        name: avg_spawn_count * row[spawn_rate_index]
-        for name, row in SPAWN_CHANCE_TABLE.items()
-    }
+    double_skip_chance = 0.0
+    if sim.wave_skip is not None:
+        double_skip_chance = WAVE_SKIP_CHANCE * WAVE_SKIP_MASTERY_TABLE[sim.wave_skip]
+    # Any given wave w can be skipped if
+    # 1. w-2 triggered a double skip, or
+    # 2. w-2 did not trigger a double skip, but w-1 triggered a single skip
+    wave_skip_chance = double_skip_chance + WAVE_SKIP_CHANCE * (1 - double_skip_chance)
 
-    avg_coin_drops = {
-        name: avg_spawn[name] * drop for name, drop in COIN_DROP_TABLE.items()
+    return Events(
+        wave_skip=wave_skip_chance,
+        free_upgrades=sim.free_upgrade_chances,
+        recovery_packages=sim.recovery_package_chance,
+        enemy_level_skips=sim.enemy_level_skip_chances,
+        enemies={
+            **{
+                name: common_spawns * row[spawn_rate_index]
+                for name, row in SPAWN_CHANCE_TABLE.items()
+            },
+            "boss": 1 if (wave % TIER_BOSS_PERIOD[sim.tier - 1]) == 0 else 0,
+            "scatter": elite_spawns / 3,
+            "vampire": elite_spawns / 3,
+            "ray": elite_spawns / 3,
+        },
+    )
+
+
+def calculate_rewards(sim: Simulation, events: Events) -> Rewards:
+    coin_bonus = TIER_COIN_BONUS[sim.tier - 1]
+    if sim.coin is not None:
+        coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
+    if sim.extra_orb is not None:
+        # TODO: Confirm if EO# affects all derivative scatter splits, or only the ones
+        # that are directly hit by orbs.
+        coin_bonus *= 1 + ((EXTRA_ORB_MASTERY_TABLE[sim.extra_orb] - 1) * sim.orb_hits)
+
+    coins_per_enemy = {
+        name: drop * coin_bonus for name, drop in COIN_DROP_TABLE.items()
     }
     if sim.critical_coin is not None:
-        avg_coin_drops["basic"] *= 1.0 + CRITICAL_COIN_MASTERY_TABLE[sim.critical_coin]
+        coins_per_enemy["basic"] *= 1.0 + CRITICAL_COIN_MASTERY_TABLE[sim.critical_coin]
+    # Each scatter splits in half 4 times. The original scatter and each of its splits
+    # give the same amount of coins.
+    coins_per_enemy["scatter"] *= sum(1 << i for i in range(0, 5))
+    # Elites are not affected by BH coin bonus
+    coins_per_enemy["scatter"] /= 11
+    coins_per_enemy["vampire"] /= 11
+    coins_per_enemy["ray"] /= 11
 
-    avg_coin_drop = sum(avg_coin_drops.values()) * TIER_COIN_BONUS[sim.tier - 1]
+    total_elite_count = (
+        events.enemies["scatter"] + events.enemies["vampire"] + events.enemies["ray"]
+    )
+    cells_per_elite = (
+        TIER_CELL_DROP_MIN[sim.tier - 1] + TIER_CELL_DROP_MAX[sim.tier - 1]
+    ) / 2
 
-    if sim.coin is not None:
-        avg_coin_drop *= COIN_MASTERY_TABLE[sim.coin]
-    if sim.extra_orb is not None:
-        avg_coin_drop *= 1 + (
-            (EXTRA_ORB_MASTERY_TABLE[sim.extra_orb] - 1) * sim.orb_kills
+    def wave_skip_reward(factor: float) -> float:
+        return (1 - events.wave_skip) + (events.wave_skip * factor)
+
+    coins = sum(
+        events.enemies[name] * coins_per_enemy[name] for name in events.enemies.keys()
+    )
+    coins *= wave_skip_reward(WAVE_SKIP_COIN_BONUS)
+    elite_cells = total_elite_count * wave_skip_reward(cells_per_elite)
+    reroll_shards = events.enemies["boss"] * REROLL_SHARD_DROP_CHANCE
+    if sim.cash is not None:
+        # Elites drop half as many reroll shards as bosses with cash mastery.
+        reroll_shards *= total_elite_count * CASH_MASTERY_TABLE[sim.cash] / 2
+    common_modules = events.enemies["boss"] * COMMON_MODULE_DROP_CHANCE
+    if sim.recovery_package is not None:
+        common_modules *= (
+            events.recovery_packages
+            * RECOVERY_PACKAGE_CHANCE_MASTERY_TABLE[sim.recovery_package]
         )
+    rare_modules = events.enemies["boss"] * RARE_MODULE_DROP_CHANCE
 
-    return avg_coin_drop
+    return Rewards(
+        coins=coins,
+        elite_cells=elite_cells,
+        reroll_shards=reroll_shards,
+        common_modules=common_modules,
+        rare_modules=rare_modules,
+    )
 
 
 def generate_intro_waves(sim: Simulation) -> Iterator[int]:
@@ -317,24 +534,6 @@ def generate_regular_waves(sim: Simulation) -> Iterator[int]:
     yield from range(sim.max_intro_wave() + 1, sim.max_waves + 1)
 
 
-def wave_skip_factor(
-    sim: Simulation,
-    no_skip_factor: float,
-    single_skip_factor: float,
-    double_skip_factor: float,
-) -> float:
-    double_wave_skip_chance = 0.0
-    if sim.wave_skip is not None:
-        double_wave_skip_chance = (
-            WAVE_SKIP_CHANCE * WAVE_SKIP_MASTERY_TABLE[sim.wave_skip]
-        )
-    return (
-        ((1 - WAVE_SKIP_CHANCE) * no_skip_factor)
-        + ((WAVE_SKIP_CHANCE - double_wave_skip_chance) * single_skip_factor)
-        + (double_wave_skip_chance * double_skip_factor)
-    )
-
-
 def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     elapsed_time = 0
     total_coins = 0
@@ -343,25 +542,22 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
     # No coins are earned during intro sprint; other resources may be, but we aren't
     # calculating them yet.
+    # TODO: fix this to handle wave skips / rewards. generate events/rewards for every
+    # wave, but null out the ones that skipped during intro.
     for wave in generate_intro_waves(sim):
         _ = simulate_wave(sim, wave)
         # Wave skip chance is not applied to intro waves
-        elapsed_time += WAVE_DURATION
+        elapsed_time += WAVE_DURATION + WAVE_COOLDOWN
         yield SimulationWaveResult(
             wave=wave, elapsed_time=elapsed_time, value=total_coins
         )
 
     for wave in generate_regular_waves(sim):
-        coins_this_wave = simulate_wave(sim, wave)
-        coins_wave = coins_this_wave * wave_skip_factor(
-            sim,
-            1.0,
-            WAVE_SKIP_COIN_BONUS,
-            WAVE_SKIP_COIN_BONUS * WAVE_SKIP_COIN_BONUS,
-        )
+        events = simulate_wave(sim, wave)
+        rewards = calculate_rewards(sim, events)
 
-        elapsed_time += WAVE_DURATION * wave_skip_factor(sim, 3 / 3, 2 / 3, 1 / 3)
-        total_coins += coins_wave
+        elapsed_time += (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
+        total_coins += rewards.coins
 
         yield SimulationWaveResult(
             wave=wave, elapsed_time=elapsed_time, value=total_coins
@@ -377,9 +573,8 @@ def evaluate_sims(
 
 # Data normalization
 
-def value_at_time(
-    run_result: SimulationRunResult, elapsed_time: float
-) -> float:
+
+def value_at_time(run_result: SimulationRunResult, elapsed_time: float) -> float:
     index = bisect.bisect_left(
         run_result.wave_results, elapsed_time, key=lambda x: x.elapsed_time
     )
@@ -399,10 +594,16 @@ def value_at_time(
 def truncate_sims_to_shortest(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
-    min_time = min(run_result.wave_results[-1].elapsed_time for _, run_result in sim_results)
+    min_time = min(
+        run_result.wave_results[-1].elapsed_time for _, run_result in sim_results
+    )
     for sim, run_result in sim_results:
-        index = bisect.bisect(run_result.wave_results, min_time, key=lambda x: x.elapsed_time)
-        yield sim, dataclasses.replace(run_result, wave_results=run_result.wave_results[:index])
+        index = bisect.bisect(
+            run_result.wave_results, min_time, key=lambda x: x.elapsed_time
+        )
+        yield sim, dataclasses.replace(
+            run_result, wave_results=run_result.wave_results[:index]
+        )
 
 
 def annotate_sims_vs_min(
@@ -432,7 +633,9 @@ def normalize_sims_vs_baseline(
     baseline_sim_name: str,
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     baseline_sim, baseline_results = next(
-        (sim, run_result) for sim, run_result in sim_results if sim.name == baseline_sim_name
+        (sim, run_result)
+        for sim, run_result in sim_results
+        if sim.name == baseline_sim_name
     )
 
     def baseline_value(sim: Simulation, wave_result: SimulationWaveResult) -> float:
@@ -486,12 +689,14 @@ def normalize_sims_vs_stone_cost(
 
 # Simulation config factories
 
-def make_sim(args: argparse.Namespace, max_waves: int = 0, tier: int = 1) -> Simulation:
+
+def make_sim(args: argparse.Namespace, max_waves: int = 0) -> Simulation:
     return Simulation(
-        tier=tier,
+        tier=args.tier,
         max_waves=max_waves,
-        orb_kills=args.orb_kills,
+        orb_hits=args.orb_hits,
         coin=args.coin,
+        enemy_balance=args.enemy_balance,
         extra_orb=args.extra_orb,
         critical_coin=args.critical_coin,
         wave_skip=args.wave_skip,
@@ -527,6 +732,8 @@ def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
 
     if mastery == "coin":
         return dataclasses.replace(sim, coin=level)
+    elif mastery == "enemy-balance":
+        return dataclasses.replace(sim, enemy_balance=level)
     elif mastery == "extra-orb":
         return dataclasses.replace(sim, extra_orb=level)
     elif mastery == "critical-coin":
@@ -542,14 +749,22 @@ def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
 
 # Plotting
 
+
 def interesting_waves(sim: Simulation) -> set[int]:
     return {
+        # Regular gameplay
         1,
+        *range(10, 101, 10),
         sim.max_waves,
-        *range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10),
-        *range(100, sim.max_waves + 1, 100),
-        *{max_intro_wave + 1 for max_intro_wave in [100, *INTRO_SPRINT_MASTERY_TABLE]},
         *SPAWN_RATE_WAVES,
+        *range(100, sim.max_waves + 1, 100),
+        # Enemy balance mastery
+        *{wave for row in ELITE_SINGLE_SPAWN_WAVES_TABLE for wave in row},
+        *{wave for row in ELITE_DOUBLE_SPAWN_WAVES_TABLE for wave in row},
+        # Intro sprint mastery
+        *range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10),
+        *{max_intro_wave + 1 for max_intro_wave in [100, *INTRO_SPRINT_MASTERY_TABLE]},
+        # Wave accelerator mastery
         *{wave for row in WAVE_ACCELERATOR_MASTERY_TABLE for wave in row},
     }
 
@@ -590,7 +805,7 @@ def render_plot(plot: Plot, output: str | None = None):
         if line.relative is not None:
             label += f"\n({line.relative:+.2%})"
         if line.roi is not None:
-            label += f"\n[{line.roi:.5%}/stone]"
+            label += f"\n[{line.roi:.6%}/stone]"
         ax.plot(
             line.xs,
             line.ys,
@@ -621,7 +836,29 @@ def render_plot(plot: Plot, output: str | None = None):
     plt.show()
 
 
+def si_format(value: float) -> str:
+    formatter = sciform.Formatter(
+        exp_mode="engineering",
+        exp_format="prefix",
+        round_mode="dec_place",
+        ndigits=2,
+    )
+    return formatter(value)
+
+
+def print_sim_results(sim_results: list[tuple[Simulation, SimulationRunResult]]):
+    for sim, run_result in sim_results:
+        total = run_result.wave_results[-1].value
+        message = f"{sim.name}: total={si_format(total)}"
+        if run_result.relative is not None:
+            message += f", relative={run_result.relative:.3%}"
+        if run_result.roi is not None:
+            message += f", roi={run_result.roi:.6%}"
+        print(message)
+
+
 # Subcommand implementations
+
 
 def subcommand_waves(args: argparse.Namespace) -> Plot:
     args.mastery = None
@@ -633,6 +870,7 @@ def subcommand_waves(args: argparse.Namespace) -> Plot:
     ]
     sim_results = list(evaluate_sims(sims))
     sim_results = list(annotate_sims_vs_min(sim_results))
+    print_sim_results(sim_results)
 
     title = ", ".join(
         [
@@ -654,11 +892,11 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
     sims = [tiers_sim(config, tier, wave) for tier, wave in args.tiers]
     sim_results = list(evaluate_sims(sims))
     sim_results = list(annotate_sims_vs_min(sim_results))
+    print_sim_results(sim_results)
 
     title = ", ".join(
         [
             f"Simulating tiers {', '.join(f'T{tier}:W{wave}' for tier, wave in args.tiers)}",
-            *relative_args_description(args, "minimum"),
             *mastery_args_description(args),
         ]
     )
@@ -670,7 +908,8 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
 def subcommand_compare(args: argparse.Namespace) -> Plot:
     args.level = mastery_level(args.level)
     convert_mastery_args(args)
-    config = make_sim(args, args.wave)
+    config = make_sim(args)
+    config.max_waves = args.wave
 
     baseline_sim_name = "baseline"
     baseline_sim = dataclasses.replace(config, name=baseline_sim_name)
@@ -689,9 +928,8 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
             sim_results = list(annotate_sims_vs_stone_cost(sim_results))
     else:
         sim_results = list(annotate_sims_vs_min(sim_results))
-
-
         sim_results = list(annotate_sims_vs_stone_cost(sim_results))
+    print_sim_results(sim_results)
 
     title = ", ".join(
         [
@@ -709,7 +947,8 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
 
 def subcommand_mastery(args: argparse.Namespace) -> Plot:
     convert_mastery_args(args)
-    config = make_sim(args, args.wave)
+    config = make_sim(args)
+    config.max_waves = args.wave
 
     sims = [mastery_sim(config, args.mastery, level) for level in MASTERY_LEVELS]
     baseline_sim = sims[0]
@@ -719,8 +958,11 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
         sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim.name))
     else:
         sim_results = list(annotate_sims_vs_min(sim_results))
+    print_sim_results(sim_results)
 
-    relative_to = "locked" if baseline_sim.level is None else f"level {baseline_sim.level}"
+    relative_to = (
+        "locked" if baseline_sim.level is None else f"level {baseline_sim.level}"
+    )
     title = ", ".join(
         [
             f"Comparing {MASTERY_DISPLAY_NAMES[args.mastery]}# levels",
@@ -748,6 +990,7 @@ if __name__ == "__main__":
         nargs="+",
         help="Sequence of wave numbers to simulate",
     )
+    add_tier_args(waves_subparser)
     add_simulation_args(waves_subparser)
     add_mastery_args(waves_subparser)
 
@@ -759,13 +1002,13 @@ if __name__ == "__main__":
         nargs="+",
         help="Sequence of tier/wave pairs to simulate",
     )
-    add_relative_args(tiers_subparser)
     add_simulation_args(tiers_subparser)
     add_mastery_args(tiers_subparser)
 
     # Compare all masteries at a single level
     compare_subparser = subparsers.add_parser("compare")
     add_wave_args(compare_subparser)
+    add_tier_args(compare_subparser)
     add_relative_args(compare_subparser)
     compare_subparser.add_argument(
         "--level",
@@ -785,6 +1028,7 @@ if __name__ == "__main__":
     # Compare all levels of a single mastery
     mastery_subparser = subparsers.add_parser("mastery")
     add_wave_args(mastery_subparser)
+    add_tier_args(mastery_subparser)
     mastery_subparser.add_argument(
         "mastery",
         choices=MASTERY_DISPLAY_NAMES.keys(),
@@ -796,8 +1040,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if not 0.0 <= args.orb_kills <= 1.0:
-        parser.error("--orb-kills must be between 0.0 and 1.0")
+    if not 0.0 <= args.orb_hits <= 1.0:
+        parser.error("--orb-hits must be between 0.0 and 1.0")
 
     if args.subcommand == "waves":
         plot = subcommand_waves(args)

@@ -1,1 +1,2 @@
 matplotlib>=3.10.0
+sciform>=0.39.0
