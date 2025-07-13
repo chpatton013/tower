@@ -107,7 +107,9 @@ assert len(ELITE_SINGLE_SPAWN_WAVES_TABLE) == len(ELITE_DOUBLE_SPAWN_WAVES_TABLE
 
 REROLL_SHARD_DROP_CHANCE = 0.15
 COMMON_MODULE_DROP_CHANCE = 0.03
+COMMON_MODULE_VALUE = 10
 RARE_MODULE_DROP_CHANCE = 0.015
+RARE_MODULE_VALUE = 30
 
 # Card data
 
@@ -271,16 +273,13 @@ class Rewards:
     coins: float = 0.0
     elite_cells: float = 0.0
     reroll_shards: float = 0.0
-    # TODO combine into module_shards
-    common_modules: float = 0.0
-    rare_modules: float = 0.0
+    module_shards: float = 0.0
 
     def __iadd__(self, other: Self) -> Self:
         self.coins += other.coins
         self.elite_cells += other.elite_cells
         self.reroll_shards += other.reroll_shards
-        self.common_modules += other.common_modules
-        self.rare_modules += other.rare_modules
+        self.module_shards += other.module_shards
         return self
 
     def __add__(self, other: Self) -> Self:
@@ -292,8 +291,7 @@ class Rewards:
         self.coins -= other.coins
         self.elite_cells -= other.elite_cells
         self.reroll_shards -= other.reroll_shards
-        self.common_modules -= other.common_modules
-        self.rare_modules -= other.rare_modules
+        self.module_shards -= other.module_shards
         return self
 
     def __sub__(self, other: Self) -> Self:
@@ -305,8 +303,7 @@ class Rewards:
         self.coins *= factor
         self.elite_cells *= factor
         self.reroll_shards *= factor
-        self.common_modules *= factor
-        self.rare_modules *= factor
+        self.module_shards *= factor
         return self
 
     def __mul__(self, factor: float | int) -> Self:
@@ -613,11 +610,14 @@ def calculate_rewards(
         reroll_shards *= total_elite_count * CASH_MASTERY_TABLE[sim.cash] / 2
     common_modules = events.enemies["boss"] * COMMON_MODULE_DROP_CHANCE
     if sim.recovery_package is not None:
-        common_modules *= (
+        common_modules += (
             events.recovery_packages
             * RECOVERY_PACKAGE_CHANCE_MASTERY_TABLE[sim.recovery_package]
         )
     rare_modules = events.enemies["boss"] * RARE_MODULE_DROP_CHANCE
+    module_shards = (
+        common_modules * COMMON_MODULE_VALUE + rare_modules * RARE_MODULE_VALUE
+    )
 
     def wave_skip_bonus(noskip: float, skip: float) -> float:
         return (1 - events.wave_skip) * noskip + (
@@ -632,8 +632,7 @@ def calculate_rewards(
         coins=coins,
         elite_cells=elite_cells,
         reroll_shards=reroll_shards,
-        common_modules=common_modules,
-        rare_modules=rare_modules,
+        module_shards=module_shards,
     )
 
 
@@ -770,7 +769,7 @@ def reward_value(sim: Simulation, rewards: Rewards) -> float:
     elif sim.reward == "rerolls":
         return rewards.reroll_shards
     elif sim.reward == "modules":
-        return rewards.common_modules + rewards.rare_modules * 3
+        return rewards.module_shards
     raise ValueError(f"Invalid reward: {sim.reward}")
 
 
@@ -782,8 +781,7 @@ def relative_rewards(lhs: Rewards, rhs: Rewards) -> Rewards:
         coins=relative_value(lhs.coins, rhs.coins),
         elite_cells=relative_value(lhs.elite_cells, rhs.elite_cells),
         reroll_shards=relative_value(lhs.reroll_shards, rhs.reroll_shards),
-        common_modules=relative_value(lhs.common_modules, rhs.common_modules),
-        rare_modules=relative_value(lhs.rare_modules, rhs.rare_modules),
+        module_shards=relative_value(lhs.module_shards, rhs.module_shards),
     )
 
 
