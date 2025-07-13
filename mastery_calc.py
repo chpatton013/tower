@@ -2,6 +2,7 @@
 
 import bisect
 import argparse
+import copy
 import dataclasses
 from typing import Iterator, Self
 
@@ -173,6 +174,7 @@ class Simulation:
     tier: int = 1
     max_waves: int = 0
     orb_hits: float = 1.0
+    reward: str = "coins"
 
     # Workshop stats
     free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
@@ -259,8 +261,7 @@ class Events:
         return self
 
     def __add__(self, other: Self) -> Self:
-        result = Events()
-        result += self
+        result = copy.deepcopy(self)
         result += other
         return result
 
@@ -270,6 +271,7 @@ class Rewards:
     coins: float = 0.0
     elite_cells: float = 0.0
     reroll_shards: float = 0.0
+    # TODO combine into module_shards
     common_modules: float = 0.0
     rare_modules: float = 0.0
 
@@ -282,9 +284,34 @@ class Rewards:
         return self
 
     def __add__(self, other: Self) -> Self:
-        result = Rewards()
-        result += self
+        result = copy.deepcopy(self)
         result += other
+        return result
+
+    def __isub__(self, other: Self) -> Self:
+        self.coins -= other.coins
+        self.elite_cells -= other.elite_cells
+        self.reroll_shards -= other.reroll_shards
+        self.common_modules -= other.common_modules
+        self.rare_modules -= other.rare_modules
+        return self
+
+    def __sub__(self, other: Self) -> Self:
+        result = copy.deepcopy(self)
+        result -= other
+        return result
+
+    def __imul__(self, factor: float | int) -> Self:
+        self.coins *= factor
+        self.elite_cells *= factor
+        self.reroll_shards *= factor
+        self.common_modules *= factor
+        self.rare_modules *= factor
+        return self
+
+    def __mul__(self, factor: float | int) -> Self:
+        result = copy.deepcopy(self)
+        result *= factor
         return result
 
 
@@ -294,7 +321,6 @@ class SimulationWaveResult:
     elapsed_time: float
     cumulative_events: Events
     cumulative_rewards: Rewards
-    value: float
 
 
 @dataclasses.dataclass
@@ -348,6 +374,13 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         type=float,
         default=1.0,
         help="Average portion of enemies hit by orbs [0.0-1.0]",
+    )
+    parser.add_argument(
+        "--reward",
+        type=str,
+        default="coins",
+        choices=["coins", "cells", "rerolls", "modules"],
+        help="Which reward to plot and compare",
     )
     parser.add_argument(
         "--log-scale",
@@ -479,10 +512,12 @@ def add_wave_args(parser: argparse.ArgumentParser):
 def relative_args_description(
     args: argparse.Namespace, baseline_sim_name: str
 ) -> list[str]:
+    desc = [args.reward]
     if args.relative:
-        return [f"Relative to {baseline_sim_name}"]
+        desc.append(f"relative to {baseline_sim_name}")
     else:
-        return ["Absolute coins"]
+        desc.append("absolute value")
+    return desc
 
 
 # Simulation logic
@@ -622,9 +657,8 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     yield SimulationWaveResult(
         wave=0,
         elapsed_time=elapsed_time,
-        cumulative_events=cumulative_events,
-        cumulative_rewards=cumulative_rewards,
-        value=cumulative_rewards.coins,
+        cumulative_events=copy.deepcopy(cumulative_events),
+        cumulative_rewards=copy.deepcopy(cumulative_rewards),
     )
 
     # Intro sprint
@@ -658,9 +692,8 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
         yield SimulationWaveResult(
             wave=wave,
             elapsed_time=elapsed_time,
-            cumulative_events=cumulative_events,
-            cumulative_rewards=cumulative_rewards,
-            value=cumulative_rewards.coins,
+            cumulative_events=copy.deepcopy(cumulative_events),
+            cumulative_rewards=copy.deepcopy(cumulative_rewards),
         )
 
     # First regular wave after intro sprint (not skippable)
@@ -677,9 +710,8 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     yield SimulationWaveResult(
         wave=max_intro_wave,
         elapsed_time=elapsed_time,
-        cumulative_events=cumulative_events,
-        cumulative_rewards=cumulative_rewards,
-        value=cumulative_rewards.coins,
+        cumulative_events=copy.deepcopy(cumulative_events),
+        cumulative_rewards=copy.deepcopy(cumulative_rewards),
     )
 
     # Regular waves
@@ -696,9 +728,8 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
         yield SimulationWaveResult(
             wave=wave,
             elapsed_time=elapsed_time,
-            cumulative_events=cumulative_events,
-            cumulative_rewards=cumulative_rewards,
-            value=cumulative_rewards.coins,
+            cumulative_events=copy.deepcopy(cumulative_events),
+            cumulative_rewards=copy.deepcopy(cumulative_rewards),
         )
 
 
@@ -712,21 +743,48 @@ def evaluate_sims(
 # Data normalization
 
 
-def value_at_time(run_result: SimulationRunResult, elapsed_time: float) -> float:
+def rewards_at_time(run_result: SimulationRunResult, elapsed_time: float) -> Rewards:
     index = bisect.bisect_left(
         run_result.wave_results, elapsed_time, key=lambda x: x.elapsed_time
     )
     if index == 0:
-        return run_result.wave_results[0].value
+        return run_result.wave_results[0].cumulative_rewards
     if index == len(run_result.wave_results):
-        return run_result.wave_results[-1].value
+        return run_result.wave_results[-1].cumulative_rewards
     lower_result = run_result.wave_results[index - 1]
     higher_result = run_result.wave_results[index]
     difference = elapsed_time - lower_result.elapsed_time
     basis = higher_result.elapsed_time - lower_result.elapsed_time
     assert basis != 0
     lambda_ = difference / basis
-    return lower_result.value + (higher_result.value - lower_result.value) * lambda_
+    lower_rewards = lower_result.cumulative_rewards
+    higher_rewards = higher_result.cumulative_rewards
+    return lower_rewards + (higher_rewards - lower_rewards) * lambda_
+
+
+def reward_value(sim: Simulation, rewards: Rewards) -> float:
+    if sim.reward == "coins":
+        return rewards.coins
+    elif sim.reward == "cells":
+        return rewards.elite_cells
+    elif sim.reward == "rerolls":
+        return rewards.reroll_shards
+    elif sim.reward == "modules":
+        return rewards.common_modules + rewards.rare_modules * 3
+    raise ValueError(f"Invalid reward: {sim.reward}")
+
+
+def relative_rewards(lhs: Rewards, rhs: Rewards) -> Rewards:
+    def relative_value(lhs: float, rhs: float) -> float:
+        return 0.0 if rhs == 0 else (lhs / rhs - 1.0)
+
+    return Rewards(
+        coins=relative_value(lhs.coins, rhs.coins),
+        elite_cells=relative_value(lhs.elite_cells, rhs.elite_cells),
+        reroll_shards=relative_value(lhs.reroll_shards, rhs.reroll_shards),
+        common_modules=relative_value(lhs.common_modules, rhs.common_modules),
+        rare_modules=relative_value(lhs.rare_modules, rhs.rare_modules),
+    )
 
 
 def truncate_sims_to_shortest(
@@ -747,9 +805,12 @@ def truncate_sims_to_shortest(
 def annotate_sims_vs_min(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
-    min_value = min(run_result.wave_results[-1].value for _, run_result in sim_results)
+    min_value = min(
+        reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
+        for sim, run_result in sim_results
+    )
     for sim, run_result in sim_results:
-        run_max = run_result.wave_results[-1].value
+        run_max = reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
         value = (run_max / min_value - 1.0) if min_value != 0 else 0.0
         yield sim, dataclasses.replace(run_result, relative=value)
 
@@ -776,31 +837,29 @@ def normalize_sims_vs_baseline(
         if sim.name == baseline_sim_name
     )
 
-    def baseline_value(sim: Simulation, wave_result: SimulationWaveResult) -> float:
-        if sim == baseline_sim:
-            return 0.0
-        baseline = value_at_time(baseline_results, wave_result.elapsed_time)
-        if baseline == 0:
-            return 0.0
-        else:
-            return (wave_result.value - baseline) / baseline
-
     for sim, run_result in sim_results:
         normalized_results = []
-        value = 0.0
+        relative = 0.0
         for wave_result in run_result.wave_results:
-            value = baseline_value(sim, wave_result)
+            baseline_rewards = Rewards()
+            if sim != baseline_sim:
+                baseline_rewards = rewards_at_time(
+                    baseline_results, wave_result.elapsed_time
+                )
+            normalized_rewards = relative_rewards(
+                wave_result.cumulative_rewards, baseline_rewards
+            )
+            relative = reward_value(sim, normalized_rewards)
             normalized_results.append(
                 SimulationWaveResult(
                     wave=wave_result.wave,
                     elapsed_time=wave_result.elapsed_time,
                     cumulative_events=wave_result.cumulative_events,
-                    cumulative_rewards=wave_result.cumulative_rewards,
-                    value=value,
+                    cumulative_rewards=normalized_rewards,
                 )
             )
         yield sim, dataclasses.replace(
-            run_result, wave_results=normalized_results, relative=value
+            run_result, wave_results=normalized_results, relative=relative
         )
 
 
@@ -812,20 +871,21 @@ def normalize_sims_vs_stone_cost(
             continue
 
         normalized_results = []
-        value = 0.0
+        roi = 0.0
         for wave_result in run_result.wave_results:
-            value = wave_result.value / MASTERY_STONE_COSTS[sim.mastery]
+            factor = 1 / MASTERY_STONE_COSTS[sim.mastery]
+            roi = reward_value(sim, wave_result.cumulative_rewards) * factor
+            normalized_rewards = wave_result.cumulative_rewards * factor
             normalized_results.append(
                 SimulationWaveResult(
                     wave=wave_result.wave,
                     elapsed_time=wave_result.elapsed_time,
                     cumulative_events=wave_result.cumulative_events,
-                    cumulative_rewards=wave_result.cumulative_rewards,
-                    value=value,
+                    cumulative_rewards=normalized_rewards,
                 )
             )
         yield sim, dataclasses.replace(
-            run_result, wave_results=normalized_results, roi=value
+            run_result, wave_results=normalized_results, roi=roi
         )
 
 
@@ -836,6 +896,7 @@ def make_sim(args: argparse.Namespace, max_waves: int = 0) -> Simulation:
     return Simulation(
         max_waves=max_waves,
         orb_hits=args.orb_hits,
+        reward=args.reward,
         coin=args.coin,
         enemy_balance=args.enemy_balance,
         extra_orb=args.extra_orb,
@@ -927,7 +988,7 @@ def plot_sim_results(
             if wave_result.wave not in waves_to_plot:
                 continue
             line.xs.append(wave_result.elapsed_time)
-            line.ys.append(wave_result.value)
+            line.ys.append(reward_value(sim, wave_result.cumulative_rewards))
         plot.lines.append(line)
 
     for line in plot.lines:
@@ -989,7 +1050,7 @@ def si_format(value: float) -> str:
 
 def print_sim_results(sim_results: list[tuple[Simulation, SimulationRunResult]]):
     for sim, run_result in sim_results:
-        total = run_result.wave_results[-1].value
+        total = reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
         message = f"{sim.name}: total={si_format(total)}"
         if run_result.relative is not None:
             message += f", relative={run_result.relative:.3%}"
@@ -1078,7 +1139,7 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
         [
             f"Comparing masteries at level {args.level}",
             *relative_args_description(args, baseline_sim_name),
-            f"For {args.wave} waves",
+            f"for {args.wave} waves",
         ]
     )
     plot = plot_sim_results(title, sim_results)
@@ -1111,7 +1172,7 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
         [
             f"Comparing {MASTERY_DISPLAY_NAMES[args.mastery]}# levels",
             *relative_args_description(args, relative_to),
-            f"For {args.wave} waves",
+            f"for {args.wave} waves",
             *mastery_args_description(args),
         ]
     )
