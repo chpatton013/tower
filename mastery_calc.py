@@ -465,6 +465,17 @@ def convert_mastery_args(args: argparse.Namespace) -> None:
     args.wave_skip = mastery_level(args.wave_skip)
 
 
+def simulation_args_description(args: argparse.Namespace) -> list[str]:
+    desc = []
+    if args.reward != "coins":
+        desc.append(f"reward {args.reward}")
+    if args.orb_hits != 1.0:
+        desc.append(f"orb hits {args.orb_hits:.2%}")
+    if args.log_scale:
+        desc.append("log scale")
+    return desc
+
+
 def mastery_args_description(args: argparse.Namespace) -> list[str]:
     desc = []
     if args.cash and args.mastery != "cash":
@@ -509,12 +520,7 @@ def add_wave_args(parser: argparse.ArgumentParser):
 def relative_args_description(
     args: argparse.Namespace, baseline_sim_name: str
 ) -> list[str]:
-    desc = [args.reward]
-    if args.relative:
-        desc.append(f"relative to {baseline_sim_name}")
-    else:
-        desc.append("absolute value")
-    return desc
+    return [f"relative to {baseline_sim_name}"] if args.relative else []
 
 
 # Simulation logic
@@ -809,8 +815,27 @@ def annotate_sims_vs_min(
     )
     for sim, run_result in sim_results:
         run_max = reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
-        value = (run_max / min_value - 1.0) if min_value != 0 else 0.0
-        yield sim, dataclasses.replace(run_result, relative=value)
+        relative = (run_max / min_value - 1.0) if min_value != 0 else 0.0
+        yield sim, dataclasses.replace(run_result, relative=relative)
+
+
+def annotate_sims_vs_baseline(
+    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    baseline_sim_name: str,
+) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    baseline_sim, baseline_results = next(
+        (sim, run_result)
+        for sim, run_result in sim_results
+        if sim.name == baseline_sim_name
+    )
+    baseline_value = reward_value(
+        baseline_sim, baseline_results.wave_results[-1].cumulative_rewards
+    )
+
+    for sim, run_result in sim_results:
+        run_max = reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
+        relative = (run_max / baseline_value - 1.0) if baseline_value != 0 else 0.0
+        yield sim, dataclasses.replace(run_result, relative=relative)
 
 
 def annotate_sims_vs_stone_cost(
@@ -1076,6 +1101,8 @@ def subcommand_waves(args: argparse.Namespace) -> Plot:
     title = ", ".join(
         [
             f"Simulating waves {', '.join(str(wave) for wave in args.waves)}",
+            f"tier {args.tier}",
+            *simulation_args_description(args),
             *mastery_args_description(args),
         ]
     )
@@ -1098,6 +1125,7 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
     title = ", ".join(
         [
             f"Simulating tiers {', '.join(f'T{tier}:W{wave}' for tier, wave in args.tiers)}",
+            *simulation_args_description(args),
             *mastery_args_description(args),
         ]
     )
@@ -1129,15 +1157,17 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
         else:
             sim_results = list(annotate_sims_vs_stone_cost(sim_results))
     else:
-        sim_results = list(annotate_sims_vs_min(sim_results))
+        sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim_name))
         sim_results = list(annotate_sims_vs_stone_cost(sim_results))
     print_sim_results(sim_results)
 
     title = ", ".join(
         [
             f"Comparing masteries at level {args.level}",
+            *simulation_args_description(args),
             *relative_args_description(args, baseline_sim_name),
-            f"for {args.wave} waves",
+            *mastery_args_description(args),
+            f"for T{args.tier}W{args.wave}",
         ]
     )
     plot = plot_sim_results(title, sim_results)
@@ -1169,9 +1199,10 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     title = ", ".join(
         [
             f"Comparing {MASTERY_DISPLAY_NAMES[args.mastery]}# levels",
+            *simulation_args_description(args),
             *relative_args_description(args, relative_to),
-            f"for {args.wave} waves",
             *mastery_args_description(args),
+            f"for T{args.tier}W{args.wave}",
         ]
     )
     plot = plot_sim_results(title, sim_results)
