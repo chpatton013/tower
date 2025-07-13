@@ -3,7 +3,7 @@
 import bisect
 import argparse
 import dataclasses
-from typing import Iterator
+from typing import Iterator, Self
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -13,11 +13,12 @@ import sciform
 # Global constants
 
 # fmt: off
+
+# Base game data
+
 GAME_SPEED = 6.25 * 0.8
 WAVE_DURATION = 26.0
 WAVE_COOLDOWN = 5.0
-WAVE_SKIP_CHANCE = 0.19
-WAVE_SKIP_COIN_BONUS = 1.10
 
 TIER_COIN_BONUS = [1.0, 1.8, 2.6, 3.4, 4.2, 5.0, 5.8, 6.6, 7.5, 8.7, 10.3, 12.2, 14.7, 17.6, 21.3, 25.2, 29.1, 33.0]
 TIER_CELL_DROP_MIN = [*([1] * 13), 7, 11, 12, 12, 12]
@@ -107,6 +108,13 @@ REROLL_SHARD_DROP_CHANCE = 0.15
 COMMON_MODULE_DROP_CHANCE = 0.03
 RARE_MODULE_DROP_CHANCE = 0.015
 
+# Card data
+
+WAVE_SKIP_CHANCE = 0.19
+WAVE_SKIP_BONUS = 1.10
+
+# Mastery data
+
 CASH_MASTERY_TABLE = [0.004, 0.008, 0.012, 0.016, 0.020, 0.024, 0.028, 0.032, 0.036, 0.040]
 COIN_MASTERY_TABLE = [1.03, 1.06, 1.09, 1.12, 1.15, 1.18, 1.21, 1.24, 1.27, 1.30]
 CRITICAL_COIN_MASTERY_TABLE = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
@@ -160,12 +168,18 @@ class Simulation:
     name: str = ""
     mastery: str | None = None
     level: int | None = None
+
+    # Estimates / inputs
     tier: int = 1
     max_waves: int = 0
     orb_hits: float = 1.0
+
+    # Workshop stats
     free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
     enemy_level_skip_chances: dict[str, float] = dataclasses.field(default_factory=dict)
     recovery_package_chance: float = 0.0
+
+    # Mastery levels
     cash: int | None = None
     coin: int | None = None
     critical_coin: int | None = None
@@ -200,28 +214,86 @@ class Simulation:
         return index
 
 
+def free_upgrades_default_factory() -> dict[str, float]:
+    return {
+        "attack": 0.0,
+        "defense": 0.0,
+        "utility": 0.0,
+    }
+
+
+def enemy_level_skip_default_factory() -> dict[str, float]:
+    return {
+        "attack": 0.0,
+        "health": 0.0,
+    }
+
+
+def enemies_default_factory() -> dict[str, float]:
+    return {name: 0.0 for name in COIN_DROP_TABLE.keys()}
+
+
 @dataclasses.dataclass
 class Events:
-    wave_skip: float
-    free_upgrades: dict[str, float]
-    recovery_packages: float
-    enemy_level_skips: dict[str, float]
-    enemies: dict[str, float]
+    wave_skip: float = 0.0
+    free_upgrades: dict[str, float] = dataclasses.field(
+        default_factory=free_upgrades_default_factory
+    )
+    recovery_packages: float = 0.0
+    enemy_level_skips: dict[str, float] = dataclasses.field(
+        default_factory=enemy_level_skip_default_factory
+    )
+    enemies: dict[str, float] = dataclasses.field(
+        default_factory=enemies_default_factory
+    )
+
+    def __iadd__(self, other: Self) -> Self:
+        self.wave_skip += other.wave_skip
+        for key, value in other.free_upgrades.items():
+            self.free_upgrades[key] += value
+        self.recovery_packages += other.recovery_packages
+        for key, value in other.enemy_level_skips.items():
+            self.enemy_level_skips[key] += value
+        for key, value in other.enemies.items():
+            self.enemies[key] += value
+        return self
+
+    def __add__(self, other: Self) -> Self:
+        result = Events()
+        result += self
+        result += other
+        return result
 
 
 @dataclasses.dataclass
 class Rewards:
-    coins: float
-    elite_cells: float
-    reroll_shards: float
-    common_modules: float
-    rare_modules: float
+    coins: float = 0.0
+    elite_cells: float = 0.0
+    reroll_shards: float = 0.0
+    common_modules: float = 0.0
+    rare_modules: float = 0.0
+
+    def __iadd__(self, other: Self) -> Self:
+        self.coins += other.coins
+        self.elite_cells += other.elite_cells
+        self.reroll_shards += other.reroll_shards
+        self.common_modules += other.common_modules
+        self.rare_modules += other.rare_modules
+        return self
+
+    def __add__(self, other: Self) -> Self:
+        result = Rewards()
+        result += self
+        result += other
+        return result
 
 
 @dataclasses.dataclass
 class SimulationWaveResult:
     wave: int
     elapsed_time: float
+    cumulative_events: Events
+    cumulative_rewards: Rewards
     value: float
 
 
@@ -436,7 +508,7 @@ def elite_spawn_count(sim: Simulation, wave: int) -> float:
 def simulate_wave(sim: Simulation, wave: int) -> Events:
     spawn_rate_index = sim.spawn_rate_index(wave)
     spawn_rate = SPAWN_RATE_SEQUENCE[spawn_rate_index]
-    common_spawns = spawn_rate * WAVE_DURATION * 8
+    common_spawns = WAVE_DURATION * 8 * spawn_rate / 100
     elite_spawns = elite_spawn_count(sim, wave)
 
     double_skip_chance = 0.0
@@ -465,7 +537,9 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
     )
 
 
-def calculate_rewards(sim: Simulation, events: Events) -> Rewards:
+def calculate_rewards(
+    sim: Simulation, events: Events, previous_rewards: Rewards
+) -> Rewards:
     coin_bonus = TIER_COIN_BONUS[sim.tier - 1]
     if sim.coin is not None:
         coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
@@ -493,15 +567,11 @@ def calculate_rewards(sim: Simulation, events: Events) -> Rewards:
     cells_per_elite = (
         TIER_CELL_DROP_MIN[sim.tier - 1] + TIER_CELL_DROP_MAX[sim.tier - 1]
     ) / 2
-
-    def wave_skip_reward(factor: float) -> float:
-        return (1 - events.wave_skip) + (events.wave_skip * factor)
+    elite_cells = total_elite_count * cells_per_elite
 
     coins = sum(
         events.enemies[name] * coins_per_enemy[name] for name in events.enemies.keys()
     )
-    coins *= wave_skip_reward(WAVE_SKIP_COIN_BONUS)
-    elite_cells = total_elite_count * wave_skip_reward(cells_per_elite)
     reroll_shards = events.enemies["boss"] * REROLL_SHARD_DROP_CHANCE
     if sim.cash is not None:
         # Elites drop half as many reroll shards as bosses with cash mastery.
@@ -513,6 +583,15 @@ def calculate_rewards(sim: Simulation, events: Events) -> Rewards:
             * RECOVERY_PACKAGE_CHANCE_MASTERY_TABLE[sim.recovery_package]
         )
     rare_modules = events.enemies["boss"] * RARE_MODULE_DROP_CHANCE
+
+    def wave_skip_bonus(noskip: float, skip: float) -> float:
+        return (1 - events.wave_skip) * noskip + (
+            events.wave_skip * skip * WAVE_SKIP_BONUS
+        )
+
+    # Apply wave skip bonus to coins and cells.
+    coins = wave_skip_bonus(coins, previous_rewards.coins)
+    elite_cells = wave_skip_bonus(elite_cells, previous_rewards.elite_cells)
 
     return Rewards(
         coins=coins,
@@ -536,31 +615,90 @@ def generate_regular_waves(sim: Simulation) -> Iterator[int]:
 
 def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     elapsed_time = 0
-    total_coins = 0
+    cumulative_events = Events()
+    cumulative_rewards = Rewards()
+    previous_rewards = Rewards()
 
-    yield SimulationWaveResult(wave=0, elapsed_time=elapsed_time, value=total_coins)
+    yield SimulationWaveResult(
+        wave=0,
+        elapsed_time=elapsed_time,
+        cumulative_events=cumulative_events,
+        cumulative_rewards=cumulative_rewards,
+        value=cumulative_rewards.coins,
+    )
 
-    # No coins are earned during intro sprint; other resources may be, but we aren't
-    # calculating them yet.
-    # TODO: fix this to handle wave skips / rewards. generate events/rewards for every
-    # wave, but null out the ones that skipped during intro.
-    for wave in generate_intro_waves(sim):
-        _ = simulate_wave(sim, wave)
-        # Wave skip chance is not applied to intro waves
-        elapsed_time += WAVE_DURATION + WAVE_COOLDOWN
+    # Intro sprint
+
+    max_intro_wave = 100
+    if sim.intro_sprint is not None:
+        max_intro_wave = INTRO_SPRINT_MASTERY_TABLE[sim.intro_sprint]
+    max_intro_wave = min(max_intro_wave, int(sim.max_waves / 10) * 10)
+
+    for wave in range(1, max_intro_wave):
+        events = simulate_wave(sim, wave)
+        # The only waves that don't skip during intro sprint are the 1st and every 10th.
+        if wave == 1 or wave % 10 == 0:
+            events.wave_skip = 0.0
+            # Unskipped intro waves are guaranteed to have a boss.
+            events.enemies["boss"] = 1
+        else:
+            events.wave_skip = 1.0
+            # Skipped intro waves are guaranteed to not have a boss.
+            events.enemies["boss"] = 0
+        rewards = calculate_rewards(sim, events, previous_rewards)
+        # No coins, rerolls, or modules are earned during intro sprint, and cells are
+        # reduced to only 20%.
+        rewards = Rewards(elite_cells=rewards.elite_cells * 0.2)
+        previous_rewards = rewards
+
+        cumulative_events += events
+        cumulative_rewards += rewards
+        elapsed_time += (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
+
         yield SimulationWaveResult(
-            wave=wave, elapsed_time=elapsed_time, value=total_coins
+            wave=wave,
+            elapsed_time=elapsed_time,
+            cumulative_events=cumulative_events,
+            cumulative_rewards=cumulative_rewards,
+            value=cumulative_rewards.coins,
         )
 
-    for wave in generate_regular_waves(sim):
-        events = simulate_wave(sim, wave)
-        rewards = calculate_rewards(sim, events)
+    # First regular wave after intro sprint (not skippable)
 
+    events = simulate_wave(sim, max_intro_wave)
+    # The first wave after intro sprint is guaranteed not to skip.
+    events.wave_skip = 0.0
+    rewards = calculate_rewards(sim, events, previous_rewards)
+    previous_rewards = rewards
+
+    cumulative_events += events
+    cumulative_rewards += rewards
+    elapsed_time += WAVE_DURATION + WAVE_COOLDOWN
+    yield SimulationWaveResult(
+        wave=max_intro_wave,
+        elapsed_time=elapsed_time,
+        cumulative_events=cumulative_events,
+        cumulative_rewards=cumulative_rewards,
+        value=cumulative_rewards.coins,
+    )
+
+    # Regular waves
+
+    for wave in range(max_intro_wave + 1, sim.max_waves + 1):
+        events = simulate_wave(sim, wave)
+        rewards = calculate_rewards(sim, events, previous_rewards)
+        previous_rewards = rewards
+
+        cumulative_events += events
+        cumulative_rewards += rewards
         elapsed_time += (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
-        total_coins += rewards.coins
 
         yield SimulationWaveResult(
-            wave=wave, elapsed_time=elapsed_time, value=total_coins
+            wave=wave,
+            elapsed_time=elapsed_time,
+            cumulative_events=cumulative_events,
+            cumulative_rewards=cumulative_rewards,
+            value=cumulative_rewards.coins,
         )
 
 
@@ -656,6 +794,8 @@ def normalize_sims_vs_baseline(
                 SimulationWaveResult(
                     wave=wave_result.wave,
                     elapsed_time=wave_result.elapsed_time,
+                    cumulative_events=wave_result.cumulative_events,
+                    cumulative_rewards=wave_result.cumulative_rewards,
                     value=value,
                 )
             )
@@ -679,6 +819,8 @@ def normalize_sims_vs_stone_cost(
                 SimulationWaveResult(
                     wave=wave_result.wave,
                     elapsed_time=wave_result.elapsed_time,
+                    cumulative_events=wave_result.cumulative_events,
+                    cumulative_rewards=wave_result.cumulative_rewards,
                     value=value,
                 )
             )
@@ -692,7 +834,6 @@ def normalize_sims_vs_stone_cost(
 
 def make_sim(args: argparse.Namespace, max_waves: int = 0) -> Simulation:
     return Simulation(
-        tier=args.tier,
         max_waves=max_waves,
         orb_hits=args.orb_hits,
         coin=args.coin,
@@ -864,6 +1005,7 @@ def subcommand_waves(args: argparse.Namespace) -> Plot:
     args.mastery = None
     convert_mastery_args(args)
     config = make_sim(args)
+    config.tier = args.tier
 
     sims = [
         waves_sim(config, max_wave) for max_wave in sorted(args.waves, reverse=True)
@@ -909,6 +1051,7 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
     args.level = mastery_level(args.level)
     convert_mastery_args(args)
     config = make_sim(args)
+    config.tier = args.tier
     config.max_waves = args.wave
 
     baseline_sim_name = "baseline"
@@ -948,6 +1091,7 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
 def subcommand_mastery(args: argparse.Namespace) -> Plot:
     convert_mastery_args(args)
     config = make_sim(args)
+    config.tier = args.tier
     config.max_waves = args.wave
 
     sims = [mastery_sim(config, args.mastery, level) for level in MASTERY_LEVELS]
