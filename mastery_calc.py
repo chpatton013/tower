@@ -22,15 +22,18 @@ GAME_SPEED = 6.25 * 0.8
 WAVE_DURATION = 26.0
 WAVE_COOLDOWN = 5.0
 
+
+TIERS = list(range(1, 19))
 TIER_COIN_BONUS = [1.0, 1.8, 2.6, 3.4, 4.2, 5.0, 5.8, 6.6, 7.5, 8.7, 10.3, 12.2, 14.7, 17.6, 21.3, 25.2, 29.1, 33.0]
+assert len(TIERS) == len(TIER_COIN_BONUS)
 TIER_CELL_DROP_MIN = [*([1] * 13), 7, 11, 12, 12, 12]
-assert len(TIER_COIN_BONUS) == len(TIER_CELL_DROP_MIN)
+assert len(TIERS) == len(TIER_CELL_DROP_MIN)
 TIER_CELL_DROP_MAX = [*range(1, 14), 14, 15, 16, 17, 18]
-assert len(TIER_COIN_BONUS) == len(TIER_CELL_DROP_MAX)
+assert len(TIERS) == len(TIER_CELL_DROP_MAX)
 TIER_REROLL_DROP = [1, 2, 3, 4, 6, 8, 12, 18, 25, 32, 40, 45, 50, 55, 60, 65, 70, 75]
-assert len(TIER_COIN_BONUS) == len(TIER_REROLL_DROP)
+assert len(TIERS) == len(TIER_REROLL_DROP)
 TIER_BOSS_PERIOD = [*([10] * 13), 9, 8, 7, 6, 5]
-assert len(TIER_COIN_BONUS) == len(TIER_BOSS_PERIOD)
+assert len(TIERS) == len(TIER_BOSS_PERIOD)
 
 SPAWN_RATE_SEQUENCE = [10, 11, 13, 15, 17, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 37, 39, 40, 42, 44, 46, 48, 49, 50, 52, 54, 56]
 SPAWN_RATE_WAVES = [1, 3, 6, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500]
@@ -142,25 +145,31 @@ assert all(len(row) == len(SPAWN_RATE_SEQUENCE) for row in WAVE_ACCELERATOR_MAST
 WAVE_SKIP_MASTERY_TABLE = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
 
 MASTERY_LEVELS = [None, *range(0, 10)]
-MASTERY_LEVEL_NAMES = [str(x) for x in range(0, 10)]
+MASTERY_LEVEL_NAMES = ["locked"] + [str(x) for x in range(0, 10)]
 MASTERY_DISPLAY_NAMES = {
+    "cash": "Cash",
     "coin": "Coin",
+    "critical-coin": "CritCoin",
     "enemy-balance": "EB",
     "extra-orb": "EO",
-    "critical-coin": "CritCoin",
-    "wave-skip": "WS",
     "intro-sprint": "IS",
+    "recovery-package": "RPC",
     "wave-accelerator": "WA",
+    "wave-skip": "WS",
 }
 MASTERY_STONE_COSTS = {
+    "cash": 500,
     "coin": 1250,
+    "critical-coin": 1000,
     "enemy-balance": 1000,
     "extra-orb": 750,
-    "critical-coin": 1000,
-    "wave-skip": 1000,
     "intro-sprint": 1250,
+    "recovery-package": 1000,
     "wave-accelerator": 1000,
+    "wave-skip": 1000,
 }
+
+REWARD_NAMES = ["coins", "cells", "rerolls", "modules"]
 # fmt: on
 
 
@@ -362,7 +371,7 @@ def add_tier_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--tier",
         type=int,
-        choices=range(1, 19),
+        choices=TIERS,
         default=1,
         help="Tier to simulate",
     )
@@ -379,7 +388,7 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         "--reward",
         type=str,
         default="coins",
-        choices=["coins", "cells", "rerolls", "modules"],
+        choices=REWARD_NAMES,
         help="Which reward to plot and compare",
     )
     parser.add_argument(
@@ -388,61 +397,75 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         default=False,
         help="Render results on a log scale",
     )
+    parser.add_argument(
+        "--no-print",
+        action="store_false",
+        default=True,
+        dest="print",
+        help="Do not print results",
+    )
+    parser.add_argument(
+        "--no-plot",
+        action="store_false",
+        default=True,
+        dest="plot",
+        help="Do not plot results",
+    )
     parser.add_argument("--output", "-o", default=None, help="Filename for saved plot")
 
 
 def add_mastery_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--cash",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Cash mastery level",
     )
     parser.add_argument(
         "--coin",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Coin mastery level",
     )
     parser.add_argument(
         "--critical-coin",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Critical coin mastery level",
     )
     parser.add_argument(
         "--enemy-balance",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Enemy balance mastery level",
     )
     parser.add_argument(
         "--extra-orb",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Extra orb mastery level",
     )
     parser.add_argument(
         "--recovery-package",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Recovery package mastery level",
     )
     parser.add_argument(
         "--intro-sprint",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Intro sprint mastery level",
     )
     parser.add_argument(
         "--wave-accelerator",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Wave accelerator mastery level",
     )
     parser.add_argument(
         "--wave-skip",
-        choices=["locked", *MASTERY_LEVEL_NAMES],
+        choices=MASTERY_LEVEL_NAMES,
         default=None,
         help="Wave skip mastery level",
     )
@@ -643,17 +666,6 @@ def calculate_rewards(
         reroll_shards=reroll_shards,
         module_shards=module_shards,
     )
-
-
-def generate_intro_waves(sim: Simulation) -> Iterator[int]:
-    yield 1
-    yield from range(
-        10, min(sim.max_intro_wave(), int(sim.max_waves / 10) * 10) + 1, 10
-    )
-
-
-def generate_regular_waves(sim: Simulation) -> Iterator[int]:
-    yield from range(sim.max_intro_wave() + 1, sim.max_waves + 1)
 
 
 def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
@@ -895,18 +907,21 @@ def normalize_sims_vs_stone_cost(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     for sim, run_result in sim_results:
-        if sim.mastery is None:
-            continue
-
         normalized_results = []
-        roi = 0.0
-        for wave_result in run_result.wave_results:
-            factor = 1 / MASTERY_STONE_COSTS[sim.mastery]
-            roi = reward_value(sim, wave_result.cumulative_rewards) * factor
-            normalized_rewards = wave_result.cumulative_rewards * factor
-            normalized_results.append(
-                dataclasses.replace(wave_result, cumulative_rewards=normalized_rewards)
-            )
+        roi = None
+        if sim.mastery is None:
+            for wave_result in run_result.wave_results:
+                normalized_results.append(
+                    dataclasses.replace(wave_result, cumulative_rewards=Rewards())
+                )
+        else:
+            for wave_result in run_result.wave_results:
+                factor = 1 / MASTERY_STONE_COSTS[sim.mastery]
+                roi = reward_value(sim, wave_result.cumulative_rewards) * factor
+                normalized_rewards = wave_result.cumulative_rewards * factor
+                normalized_results.append(
+                    dataclasses.replace(wave_result, cumulative_rewards=normalized_rewards)
+                )
         yield sim, dataclasses.replace(
             run_result, wave_results=normalized_results, roi=roi
         )
@@ -955,20 +970,24 @@ def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
     else:
         sim = dataclasses.replace(sim, name=f"{mastery}: level {level}")
 
-    if mastery == "coin":
+    if mastery == "cash":
+        return dataclasses.replace(sim, cash=level)
+    elif mastery == "coin":
         return dataclasses.replace(sim, coin=level)
+    elif mastery == "critical-coin":
+        return dataclasses.replace(sim, critical_coin=level)
     elif mastery == "enemy-balance":
         return dataclasses.replace(sim, enemy_balance=level)
     elif mastery == "extra-orb":
         return dataclasses.replace(sim, extra_orb=level)
-    elif mastery == "critical-coin":
-        return dataclasses.replace(sim, critical_coin=level)
-    elif mastery == "wave-skip":
-        return dataclasses.replace(sim, wave_skip=level)
     elif mastery == "intro-sprint":
         return dataclasses.replace(sim, intro_sprint=level)
+    elif mastery == "recovery-package":
+        return dataclasses.replace(sim, recovery_package=level)
     elif mastery == "wave-accelerator":
         return dataclasses.replace(sim, wave_accelerator=level)
+    elif mastery == "wave-skip":
+        return dataclasses.replace(sim, wave_skip=level)
     raise ValueError(f"Invalid mastery: {mastery}")
 
 
@@ -1027,7 +1046,7 @@ def calculate_margins(sim_results: list[tuple[Simulation, SimulationRunResult]])
         bottom = min_value
     if max_value < top + margin:
         top = max_value
-    margin = (top - bottom) * 0.05
+    margin = min(0.05, (top - bottom) * 0.05)
 
     # Dilate the margins by 5% of the included data range.
     return bottom - margin, top + margin
@@ -1081,7 +1100,7 @@ def plot_sim_results(
     return plot
 
 
-def render_plot(plot: Plot, output: str | None = None):
+def render_plot(plot: Plot, /, show: bool = True, output: str | None = None):
     _, ax = plt.subplots(1, 1, figsize=(12, 10))
 
     colors = list(mcolors.TABLEAU_COLORS.values())
@@ -1121,7 +1140,8 @@ def render_plot(plot: Plot, output: str | None = None):
         plt.savefig(output, dpi=300, bbox_inches="tight")
         print(f"Plot saved as {output}")
 
-    plt.show()
+    if show:
+        plt.show()
 
 
 def si_format(value: float) -> str:
@@ -1159,7 +1179,8 @@ def subcommand_waves(args: argparse.Namespace) -> Plot:
     ]
     sim_results = list(evaluate_sims(sims))
     sim_results = list(annotate_sims_vs_min(sim_results))
-    print_sim_results(sim_results)
+    if args.print:
+        print_sim_results(sim_results)
 
     title = ", ".join(
         [
@@ -1183,7 +1204,8 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
     sims = [tiers_sim(config, tier, wave) for tier, wave in args.tiers]
     sim_results = list(evaluate_sims(sims))
     sim_results = list(annotate_sims_vs_min(sim_results))
-    print_sim_results(sim_results)
+    if args.print:
+        print_sim_results(sim_results)
 
     title = ", ".join(
         [
@@ -1222,7 +1244,8 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
     else:
         sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim_name))
         sim_results = list(annotate_sims_vs_stone_cost(sim_results))
-    print_sim_results(sim_results)
+    if args.print:
+        print_sim_results(sim_results)
 
     title = ", ".join(
         [
@@ -1254,7 +1277,8 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
         sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim.name))
     else:
         sim_results = list(annotate_sims_vs_min(sim_results))
-    print_sim_results(sim_results)
+    if args.print:
+        print_sim_results(sim_results)
 
     relative_to = (
         "locked" if baseline_sim.level is None else f"level {baseline_sim.level}"
@@ -1350,4 +1374,4 @@ if __name__ == "__main__":
         plot = subcommand_mastery(args)
     else:
         parser.error(f"Invalid subcommand: {args.subcommand}")
-    render_plot(plot, output=args.output)
+    render_plot(plot, show=args.plot, output=args.output)
