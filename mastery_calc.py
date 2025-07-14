@@ -6,6 +6,7 @@ import copy
 import dataclasses
 from typing import Iterator, Self
 
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import sciform
@@ -323,6 +324,7 @@ class SimulationWaveResult:
 @dataclasses.dataclass
 class SimulationRunResult:
     wave_results: list[SimulationWaveResult]
+    total: float | None = None
     relative: float | None = None
     roi: float | None = None
 
@@ -342,6 +344,7 @@ class Plot:
     title: str
     xlabel: str
     ylabel: str
+    top: float | None = None
     bottom: float | None = None
     log_scale: bool = False
     lines: list[PlotLine] = dataclasses.field(default_factory=list)
@@ -528,7 +531,7 @@ def relative_args_description(
 
 def elite_spawn_count(sim: Simulation, wave: int) -> float:
     def index(table: list[int], value: int) -> int:
-        return bisect.bisect(table, value, hi=len(table) - 1)
+        return bisect.bisect(table, value, lo=1) - 1
 
     single_index = index(ELITE_SINGLE_SPAWN_WAVES_TABLE[sim.tier - 1], wave)
     double_index = index(ELITE_DOUBLE_SPAWN_WAVES_TABLE[sim.tier - 1], wave)
@@ -668,11 +671,7 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
     # Intro sprint
 
-    max_intro_wave = 100
-    if sim.intro_sprint is not None:
-        max_intro_wave = INTRO_SPRINT_MASTERY_TABLE[sim.intro_sprint]
-    max_intro_wave = min(max_intro_wave, int(sim.max_waves / 10) * 10)
-
+    max_intro_wave = sim.max_intro_wave()
     for wave in range(1, max_intro_wave):
         events = simulate_wave(sim, wave)
         # The only waves that don't skip during intro sprint are the 1st and every 10th.
@@ -742,26 +741,37 @@ def evaluate_sims(
     sims: list[Simulation],
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     for sim in sims:
-        yield sim, SimulationRunResult(wave_results=list(simulate_run(sim)))
+        wave_results = list(simulate_run(sim))
+        total = reward_value(sim, wave_results[-1].cumulative_rewards)
+        yield sim, SimulationRunResult(wave_results=wave_results, total=total)
 
 
 # Data normalization
 
 
-def rewards_at_time(run_result: SimulationRunResult, elapsed_time: float) -> Rewards:
+def results_at_time(
+    run_result: SimulationRunResult, elapsed_time: float
+) -> tuple[SimulationWaveResult, SimulationWaveResult, float]:
     index = bisect.bisect_left(
         run_result.wave_results, elapsed_time, key=lambda x: x.elapsed_time
     )
     if index == 0:
-        return run_result.wave_results[0].cumulative_rewards
+        first_result = run_result.wave_results[0]
+        return first_result, first_result, 0.0
     if index == len(run_result.wave_results):
-        return run_result.wave_results[-1].cumulative_rewards
+        last_result = run_result.wave_results[-1]
+        return last_result, last_result, 1.0
     lower_result = run_result.wave_results[index - 1]
     higher_result = run_result.wave_results[index]
     difference = elapsed_time - lower_result.elapsed_time
     basis = higher_result.elapsed_time - lower_result.elapsed_time
     assert basis != 0
     lambda_ = difference / basis
+    return lower_result, higher_result, lambda_
+
+
+def rewards_at_time(run_result: SimulationRunResult, elapsed_time: float) -> Rewards:
+    lower_result, higher_result, lambda_ = results_at_time(run_result, elapsed_time)
     lower_rewards = lower_result.cumulative_rewards
     higher_rewards = higher_result.cumulative_rewards
     return lower_rewards + (higher_rewards - lower_rewards) * lambda_
@@ -801,8 +811,10 @@ def truncate_sims_to_shortest(
         index = bisect.bisect(
             run_result.wave_results, min_time, key=lambda x: x.elapsed_time
         )
+        wave_results = run_result.wave_results[:index]
+        total = reward_value(sim, wave_results[-1].cumulative_rewards)
         yield sim, dataclasses.replace(
-            run_result, wave_results=run_result.wave_results[:index]
+            run_result, wave_results=wave_results, total=total
         )
 
 
@@ -854,8 +866,8 @@ def normalize_sims_vs_baseline(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
     baseline_sim_name: str,
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
-    baseline_sim, baseline_results = next(
-        (sim, run_result)
+    baseline_results = next(
+        run_result
         for sim, run_result in sim_results
         if sim.name == baseline_sim_name
     )
@@ -864,22 +876,15 @@ def normalize_sims_vs_baseline(
         normalized_results = []
         relative = 0.0
         for wave_result in run_result.wave_results:
-            baseline_rewards = Rewards()
-            if sim != baseline_sim:
-                baseline_rewards = rewards_at_time(
-                    baseline_results, wave_result.elapsed_time
-                )
+            baseline_rewards = rewards_at_time(
+                baseline_results, wave_result.elapsed_time
+            )
             normalized_rewards = relative_rewards(
                 wave_result.cumulative_rewards, baseline_rewards
             )
             relative = reward_value(sim, normalized_rewards)
             normalized_results.append(
-                SimulationWaveResult(
-                    wave=wave_result.wave,
-                    elapsed_time=wave_result.elapsed_time,
-                    cumulative_events=wave_result.cumulative_events,
-                    cumulative_rewards=normalized_rewards,
-                )
+                dataclasses.replace(wave_result, cumulative_rewards=normalized_rewards)
             )
         yield sim, dataclasses.replace(
             run_result, wave_results=normalized_results, relative=relative
@@ -900,12 +905,7 @@ def normalize_sims_vs_stone_cost(
             roi = reward_value(sim, wave_result.cumulative_rewards) * factor
             normalized_rewards = wave_result.cumulative_rewards * factor
             normalized_results.append(
-                SimulationWaveResult(
-                    wave=wave_result.wave,
-                    elapsed_time=wave_result.elapsed_time,
-                    cumulative_events=wave_result.cumulative_events,
-                    cumulative_rewards=normalized_rewards,
-                )
+                dataclasses.replace(wave_result, cumulative_rewards=normalized_rewards)
             )
         yield sim, dataclasses.replace(
             run_result, wave_results=normalized_results, roi=roi
@@ -975,21 +975,81 @@ def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
 # Plotting
 
 
+def calculate_margins(sim_results: list[tuple[Simulation, SimulationRunResult]]) -> tuple[float, float]:
+    # Produce bottom/top margins for a plot attempting to fit all the important data
+    # points, which must include at least the last 2/3 of data points (by time).
+    # If the global maximum is outside the last 2/3 of the data, the margins are dilated
+    # to the lesser-value of the global maximum and 3-sigma over the mean. Sigma
+    # calculation only considers data in the last 2/3 of the data set.
+    # Margins are then dilated by 5% of the bottom-to-top range. If the global maximum
+    # resides between the pre-dilated and dilated margin, the margin is dilated again to
+    # +5% over the global maximum.
+
+    assert len(sim_results) > 0
+
+    # Find the 1/3 - 2/3 partition value of the data set.
+    min_time = float("inf")
+    max_time = float("-inf")
+    for _, run_result in sim_results:
+        for wave_result in run_result.wave_results:
+            min_time = min(min_time, wave_result.elapsed_time)
+            max_time = max(max_time, wave_result.elapsed_time)
+    time_partition = (max_time - min_time) / 3
+
+    # Find the minmax of the data set globally and within the last 2/3 time range.
+    min_value = float("inf")
+    max_value = float("-inf")
+    min_inlier = float("inf")
+    max_inlier = float("-inf")
+    values = []
+    for sim, run_result in sim_results:
+        for wave_result in run_result.wave_results:
+            value = reward_value(sim, wave_result.cumulative_rewards)
+            min_value = min(min_value, value)
+            max_value = max(max_value, value)
+            if wave_result.elapsed_time >= time_partition:
+                min_inlier = min(min_inlier, value)
+                max_inlier = max(max_inlier, value)
+                values.append(value)
+
+    # Calculate mean and sigma over the last 2/3 of the data set.
+    mean = np.mean(values)
+    stddev = np.std(values)
+    sigma = mean - 3.0 * stddev
+
+    # Dilate the inliers up to 3-sigma over the mean to reach the global min/max.
+    bottom = min(min_inlier, max(min_value, mean - sigma))
+    top = max(max_inlier, min(max_value, mean + sigma))
+    margin = (top - bottom) * 0.05
+
+    # Dilate the data range by up to 5% to reach the global min/max.
+    if min_value > bottom - margin:
+        bottom = min_value
+    if max_value < top + margin:
+        top = max_value
+    margin = (top - bottom) * 0.05
+
+    # Dilate the margins by 5% of the included data range.
+    return bottom - margin, top + margin
+
+
 def interesting_waves(sim: Simulation) -> set[int]:
     return {
         # Regular gameplay
-        1,
-        *range(10, 101, 10),
-        sim.max_waves,
+        *(0, 1, *range(10, 101, 10), sim.max_waves),
         *SPAWN_RATE_WAVES,
         *range(100, sim.max_waves + 1, 100),
         # Enemy balance mastery
+        *{wave - 1 for row in ELITE_SINGLE_SPAWN_WAVES_TABLE for wave in row},
+        *{wave - 1 for row in ELITE_DOUBLE_SPAWN_WAVES_TABLE for wave in row},
         *{wave for row in ELITE_SINGLE_SPAWN_WAVES_TABLE for wave in row},
         *{wave for row in ELITE_DOUBLE_SPAWN_WAVES_TABLE for wave in row},
         # Intro sprint mastery
-        *range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10),
+        *{wave - 1 for wave in range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10)},
+        *{wave for wave in range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10)},
         *{max_intro_wave + 1 for max_intro_wave in [100, *INTRO_SPRINT_MASTERY_TABLE]},
         # Wave accelerator mastery
+        *{wave - 1 for row in WAVE_ACCELERATOR_MASTERY_TABLE for wave in row},
         *{wave for row in WAVE_ACCELERATOR_MASTERY_TABLE for wave in row},
     }
 
@@ -1010,8 +1070,9 @@ def plot_sim_results(
         for wave_result in run_result.wave_results:
             if wave_result.wave not in waves_to_plot:
                 continue
+            value = reward_value(sim, wave_result.cumulative_rewards)
             line.xs.append(wave_result.elapsed_time)
-            line.ys.append(reward_value(sim, wave_result.cumulative_rewards))
+            line.ys.append(value)
         plot.lines.append(line)
 
     for line in plot.lines:
@@ -1041,6 +1102,8 @@ def render_plot(plot: Plot, output: str | None = None):
             markersize=4,
         )
 
+    if plot.top is not None:
+        ax.set_ylim(top=plot.top)
     if plot.bottom is not None:
         ax.set_ylim(bottom=plot.bottom)
     if plot.log_scale:
@@ -1073,12 +1136,12 @@ def si_format(value: float) -> str:
 
 def print_sim_results(sim_results: list[tuple[Simulation, SimulationRunResult]]):
     for sim, run_result in sim_results:
-        total = reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
-        message = f"{sim.name}: total={si_format(total)}"
+        assert run_result.total is not None
+        message = f"{sim.name}: total={si_format(run_result.total)}"
         if run_result.relative is not None:
             message += f", relative={run_result.relative:.3%}"
-        if run_result.roi is not None:
-            message += f", roi={run_result.roi:.6%}"
+            if run_result.roi is not None:
+                message += f", roi={run_result.roi:.6%}"
         print(message)
 
 
@@ -1173,7 +1236,7 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
     plot = plot_sim_results(title, sim_results)
     plot.log_scale = args.log_scale
     if args.relative:
-        plot.bottom = 0.0
+        plot.bottom, plot.top = calculate_margins(sim_results)
     return plot
 
 
@@ -1208,7 +1271,7 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     plot = plot_sim_results(title, sim_results)
     plot.log_scale = args.log_scale
     if args.relative:
-        plot.bottom = 0.0
+        plot.bottom, plot.top = calculate_margins(sim_results)
     return plot
 
 
