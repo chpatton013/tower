@@ -22,7 +22,6 @@ GAME_SPEED = 6.25 * 0.8
 WAVE_DURATION = 26.0
 WAVE_COOLDOWN = 5.0
 
-
 TIERS = list(range(1, 19))
 TIER_COIN_BONUS = [1.0, 1.8, 2.6, 3.4, 4.2, 5.0, 5.8, 6.6, 7.5, 8.7, 10.3, 12.2, 14.7, 17.6, 21.3, 25.2, 29.1, 33.0]
 assert len(TIERS) == len(TIER_COIN_BONUS)
@@ -64,7 +63,7 @@ COIN_DROP_TABLE["vampire"] = 4.0
 COIN_DROP_TABLE["ray"] = 4.0
 COIN_DROP_TABLE["boss"] = 0.0
 
-ELITE_SPAWN_CHANCE_TABLE = [0.0000, 0.0033, 0.0133, 0.0300, 0.0500, 0.0800, 0.1200, 0.1600, 0.2100, 0.2700, 0.3300]
+ELITE_SPAWN_CHANCE_TABLE = [0.00, 0.01, 0.04, 0.09, 0.15, 0.24, 0.36, 0.48, 0.63, 0.81, 1.00]
 ELITE_SINGLE_SPAWN_WAVES_TABLE = [
     [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000],
     [0, 450, 900, 1350, 1800, 2700, 3600, 4500, 5400, 6300, 7200],
@@ -249,6 +248,7 @@ def enemies_default_factory() -> dict[str, float]:
 
 @dataclasses.dataclass
 class Events:
+    wave: int = 0
     wave_skip: float = 0.0
     free_upgrades: dict[str, float] = dataclasses.field(
         default_factory=free_upgrades_default_factory
@@ -385,6 +385,12 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         help="Average portion of enemies hit by orbs [0.0-1.0]",
     )
     parser.add_argument(
+        "--package-chance",
+        type=float,
+        default=0.82,
+        help="Recovery package chance [0.0-1.0]",
+    )
+    parser.add_argument(
         "--reward",
         type=str,
         default="coins",
@@ -504,27 +510,27 @@ def simulation_args_description(args: argparse.Namespace) -> list[str]:
 
 def mastery_args_description(args: argparse.Namespace) -> list[str]:
     desc = []
-    if args.cash and args.mastery != "cash":
+    if args.cash:
         desc.append(f"{MASTERY_DISPLAY_NAMES['cash']}#{args.cash}")
-    if args.coin and args.mastery != "coin":
+    if args.coin:
         desc.append(f"{MASTERY_DISPLAY_NAMES['coin']}#{args.coin}")
-    if args.critical_coin and args.mastery != "critical-coin":
+    if args.critical_coin:
         desc.append(f"{MASTERY_DISPLAY_NAMES['critical-coin']}#{args.critical_coin}")
-    if args.enemy_balance and args.mastery != "enemy-balance":
+    if args.enemy_balance:
         desc.append(f"{MASTERY_DISPLAY_NAMES['enemy-balance']}#{args.enemy_balance}")
-    if args.extra_orb and args.mastery != "extra-orb":
+    if args.extra_orb:
         desc.append(f"{MASTERY_DISPLAY_NAMES['extra-orb']}#{args.extra_orb}")
-    if args.intro_sprint and args.mastery != "intro-sprint":
+    if args.intro_sprint:
         desc.append(f"{MASTERY_DISPLAY_NAMES['intro-sprint']}#{args.intro_sprint}")
-    if args.recovery_package and args.mastery != "recovery-package":
+    if args.recovery_package:
         desc.append(
             f"{MASTERY_DISPLAY_NAMES['recovery-package']}#{args.recovery_package}"
         )
-    if args.wave_accelerator and args.mastery != "wave-accelerator":
+    if args.wave_accelerator:
         desc.append(
             f"{MASTERY_DISPLAY_NAMES['wave-accelerator']}#{args.wave_accelerator}"
         )
-    if args.wave_skip and args.mastery != "wave-skip":
+    if args.wave_skip:
         desc.append(f"{MASTERY_DISPLAY_NAMES['wave-skip']}#{args.wave_skip}")
     return desc
 
@@ -575,6 +581,10 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
     common_spawns = WAVE_DURATION * 8 * spawn_rate / 100
     elite_spawns = elite_spawn_count(sim, wave)
 
+    boss_period = TIER_BOSS_PERIOD[sim.tier - 1]
+    boss_spawn = 1 if (wave % boss_period) == 0 else 0
+    package_spawn = 1 if ((wave - 1) % boss_period) else sim.recovery_package_chance
+
     double_skip_chance = 0.0
     if sim.wave_skip is not None:
         double_skip_chance = WAVE_SKIP_CHANCE * WAVE_SKIP_MASTERY_TABLE[sim.wave_skip]
@@ -584,16 +594,17 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
     wave_skip_chance = double_skip_chance + WAVE_SKIP_CHANCE * (1 - double_skip_chance)
 
     return Events(
+        wave=wave,
         wave_skip=wave_skip_chance,
         free_upgrades=sim.free_upgrade_chances,
-        recovery_packages=sim.recovery_package_chance,
+        recovery_packages=package_spawn,
         enemy_level_skips=sim.enemy_level_skip_chances,
         enemies={
             **{
                 name: common_spawns * row[spawn_rate_index]
                 for name, row in SPAWN_CHANCE_TABLE.items()
             },
-            "boss": 1 if (wave % TIER_BOSS_PERIOD[sim.tier - 1]) == 0 else 0,
+            "boss": boss_spawn,
             "scatter": elite_spawns / 3,
             "vampire": elite_spawns / 3,
             "ray": elite_spawns / 3,
@@ -601,9 +612,7 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
     )
 
 
-def calculate_rewards(
-    sim: Simulation, events: Events, previous_rewards: Rewards
-) -> Rewards:
+def calculate_coins(sim: Simulation, events: Events) -> float:
     coin_bonus = TIER_COIN_BONUS[sim.tier - 1]
     if sim.coin is not None:
         coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
@@ -611,7 +620,6 @@ def calculate_rewards(
         # TODO: Confirm if EO# affects all derivative scatter splits, or only the ones
         # that are directly hit by orbs.
         coin_bonus *= 1 + ((EXTRA_ORB_MASTERY_TABLE[sim.extra_orb] - 1) * sim.orb_hits)
-
     coins_per_enemy = {
         name: drop * coin_bonus for name, drop in COIN_DROP_TABLE.items()
     }
@@ -624,22 +632,38 @@ def calculate_rewards(
     coins_per_enemy["scatter"] /= 11
     coins_per_enemy["vampire"] /= 11
     coins_per_enemy["ray"] /= 11
+    return sum(
+        events.enemies[name] * coins_per_enemy[name] for name in events.enemies.keys()
+    )
 
+
+def calculate_cells(sim: Simulation, events: Events) -> float:
     total_elite_count = (
         events.enemies["scatter"] + events.enemies["vampire"] + events.enemies["ray"]
     )
     cells_per_elite = (
         TIER_CELL_DROP_MIN[sim.tier - 1] + TIER_CELL_DROP_MAX[sim.tier - 1]
     ) / 2
-    elite_cells = total_elite_count * cells_per_elite
+    return total_elite_count * cells_per_elite
 
-    coins = sum(
-        events.enemies[name] * coins_per_enemy[name] for name in events.enemies.keys()
+
+def calculate_rerolls(sim: Simulation, events: Events) -> float:
+    total_elite_count = (
+        events.enemies["scatter"] + events.enemies["vampire"] + events.enemies["ray"]
     )
-    reroll_shards = events.enemies["boss"] * REROLL_SHARD_DROP_CHANCE
+    rerolls_per_boss = TIER_REROLL_DROP[sim.tier - 1]
+    # Elites drop half as many reroll shards as bosses with cash mastery.
+    rerolls_per_elite = rerolls_per_boss / 2
+
+    reroll_shards = events.enemies["boss"] * REROLL_SHARD_DROP_CHANCE * rerolls_per_boss
     if sim.cash is not None:
-        # Elites drop half as many reroll shards as bosses with cash mastery.
-        reroll_shards *= total_elite_count * CASH_MASTERY_TABLE[sim.cash] / 2
+        reroll_shards += (
+            total_elite_count * CASH_MASTERY_TABLE[sim.cash] * rerolls_per_elite
+        )
+    return reroll_shards
+
+
+def calculate_modules(sim: Simulation, events: Events) -> float:
     common_modules = events.enemies["boss"] * COMMON_MODULE_DROP_CHANCE
     if sim.recovery_package is not None:
         common_modules += (
@@ -647,9 +671,16 @@ def calculate_rewards(
             * RECOVERY_PACKAGE_CHANCE_MASTERY_TABLE[sim.recovery_package]
         )
     rare_modules = events.enemies["boss"] * RARE_MODULE_DROP_CHANCE
-    module_shards = (
-        common_modules * COMMON_MODULE_VALUE + rare_modules * RARE_MODULE_VALUE
-    )
+    return common_modules * COMMON_MODULE_VALUE + rare_modules * RARE_MODULE_VALUE
+
+
+def calculate_rewards(
+    sim: Simulation, events: Events, previous_rewards: Rewards
+) -> Rewards:
+    coins = calculate_coins(sim, events)
+    elite_cells = calculate_cells(sim, events)
+    reroll_shards = calculate_rerolls(sim, events)
+    module_shards = calculate_modules(sim, events)
 
     def wave_skip_bonus(noskip: float, skip: float) -> float:
         return (1 - events.wave_skip) * noskip + (
@@ -879,9 +910,7 @@ def normalize_sims_vs_baseline(
     baseline_sim_name: str,
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     baseline_results = next(
-        run_result
-        for sim, run_result in sim_results
-        if sim.name == baseline_sim_name
+        run_result for sim, run_result in sim_results if sim.name == baseline_sim_name
     )
 
     for sim, run_result in sim_results:
@@ -920,7 +949,9 @@ def normalize_sims_vs_stone_cost(
                 roi = reward_value(sim, wave_result.cumulative_rewards) * factor
                 normalized_rewards = wave_result.cumulative_rewards * factor
                 normalized_results.append(
-                    dataclasses.replace(wave_result, cumulative_rewards=normalized_rewards)
+                    dataclasses.replace(
+                        wave_result, cumulative_rewards=normalized_rewards
+                    )
                 )
         yield sim, dataclasses.replace(
             run_result, wave_results=normalized_results, roi=roi
@@ -930,18 +961,20 @@ def normalize_sims_vs_stone_cost(
 # Simulation config factories
 
 
-def make_sim(args: argparse.Namespace, max_waves: int = 0) -> Simulation:
+def make_sim(args: argparse.Namespace) -> Simulation:
     return Simulation(
-        max_waves=max_waves,
         orb_hits=args.orb_hits,
         reward=args.reward,
+        recovery_package_chance=args.package_chance,
+        cash=args.cash,
         coin=args.coin,
+        critical_coin=args.critical_coin,
         enemy_balance=args.enemy_balance,
         extra_orb=args.extra_orb,
-        critical_coin=args.critical_coin,
-        wave_skip=args.wave_skip,
         intro_sprint=args.intro_sprint,
+        recovery_package=args.recovery_package,
         wave_accelerator=args.wave_accelerator,
+        wave_skip=args.wave_skip,
     )
 
 
@@ -994,7 +1027,9 @@ def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
 # Plotting
 
 
-def calculate_margins(sim_results: list[tuple[Simulation, SimulationRunResult]]) -> tuple[float, float]:
+def calculate_margins(
+    sim_results: list[tuple[Simulation, SimulationRunResult]]
+) -> tuple[float, float]:
     # Produce bottom/top margins for a plot attempting to fit all the important data
     # points, which must include at least the last 2/3 of data points (by time).
     # If the global maximum is outside the last 2/3 of the data, the margins are dilated
@@ -1075,9 +1110,10 @@ def interesting_waves(sim: Simulation) -> set[int]:
 
 def plot_sim_results(
     title: str,
+    ylabel: str,
     sim_results: list[tuple[Simulation, SimulationRunResult]],
 ) -> Plot:
-    plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel="Coins")
+    plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel=ylabel)
     for sim, run_result in sim_results:
         line = PlotLine(
             name=sim.name,
@@ -1190,7 +1226,8 @@ def subcommand_waves(args: argparse.Namespace) -> Plot:
             *mastery_args_description(args),
         ]
     )
-    plot = plot_sim_results(title, sim_results)
+    ylabel = args.reward
+    plot = plot_sim_results(title, ylabel, sim_results)
     plot.log_scale = args.log_scale
     return plot
 
@@ -1214,7 +1251,8 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
             *mastery_args_description(args),
         ]
     )
-    plot = plot_sim_results(title, sim_results)
+    ylabel = args.reward
+    plot = plot_sim_results(title, ylabel, sim_results)
     plot.log_scale = args.log_scale
     return plot
 
@@ -1256,7 +1294,11 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
             f"for T{args.tier}W{args.wave}",
         ]
     )
-    plot = plot_sim_results(title, sim_results)
+    ylabel = args.reward
+    if args.relative:
+        ylabel += f" relative to {baseline_sim_name}"
+
+    plot = plot_sim_results(title, ylabel, sim_results)
     plot.log_scale = args.log_scale
     if args.relative:
         plot.bottom, plot.top = calculate_margins(sim_results)
@@ -1276,7 +1318,7 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     if args.relative:
         sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim.name))
     else:
-        sim_results = list(annotate_sims_vs_min(sim_results))
+        sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim.name))
     if args.print:
         print_sim_results(sim_results)
 
@@ -1292,7 +1334,10 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
             f"for T{args.tier}W{args.wave}",
         ]
     )
-    plot = plot_sim_results(title, sim_results)
+    ylabel = args.reward
+    if args.relative:
+        ylabel += f" relative to {baseline_sim.name}"
+    plot = plot_sim_results(title, ylabel, sim_results)
     plot.log_scale = args.log_scale
     if args.relative:
         plot.bottom, plot.top = calculate_margins(sim_results)
@@ -1363,6 +1408,8 @@ if __name__ == "__main__":
 
     if not 0.0 <= args.orb_hits <= 1.0:
         parser.error("--orb-hits must be between 0.0 and 1.0")
+    if not 0.0 <= args.package_chance <= 1.0:
+        parser.error("--package-chance must be between 0.0 and 1.0")
 
     if args.subcommand == "waves":
         plot = subcommand_waves(args)
