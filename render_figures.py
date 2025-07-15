@@ -185,9 +185,10 @@ def generate_commands(
         for reward in ["coins", "cells"]
     )
     commands.extend(
-        generate_compare_command(args, level, "coins", rel, roi, extra_args=extra_args)
+        generate_compare_command(args, level, reward, rel, roi, extra_args=extra_args)
         for level in args.levels
         for rel, roi in rel_roi
+        for reward in ["coins", "cells", "rerolls", "modules"]
     )
     commands.extend(
         generate_mastery_command(args, mastery, "coins", rel, extra_args=extra_args)
