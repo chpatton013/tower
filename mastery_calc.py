@@ -114,6 +114,7 @@ COMMON_MODULE_VALUE = 10
 RARE_MODULE_DROP_CHANCE = 0.015
 RARE_MODULE_VALUE = 30
 BLACK_HOLE_COIN_BONUS = 11.0
+RECOVERY_PACKAGE_CHANCE = 0.82
 
 # Card data
 
@@ -191,7 +192,6 @@ class Simulation:
     # Workshop stats
     free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
     enemy_level_skip_chances: dict[str, float] = dataclasses.field(default_factory=dict)
-    recovery_package_chance: float = 0.0
 
     # Mastery levels
     cash: int | None = None
@@ -333,7 +333,6 @@ class Plot:
     ylabel: str
     top: float | None = None
     bottom: float | None = None
-    log_scale: bool = False
     lines: list[PlotLine] = dataclasses.field(default_factory=list)
 
 
@@ -363,12 +362,6 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         help="Average portion of enemies hit by orbs [0.0-1.0]",
     )
     parser.add_argument(
-        "--package-chance",
-        type=float,
-        default=0.82,
-        help="Recovery package chance [0.0-1.0]",
-    )
-    parser.add_argument(
         "--reward",
         type=str,
         default="coins",
@@ -376,17 +369,22 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         help="Which reward to plot and compare",
     )
     parser.add_argument(
-        "--no-crop",
-        dest="crop",
-        action="store_false",
-        default=True,
-        help="Do not crop results of the plot",
-    )
-    parser.add_argument(
-        "--log-scale",
+        "--elapsed",
         action="store_true",
         default=False,
-        help="Render results on a log scale",
+        help="Normalize results by elapsed time",
+    )
+    parser.add_argument(
+        "--truncate",
+        action="store_true",
+        default=False,
+        help="Truncate runs to the end of the shortest simulation",
+    )
+    parser.add_argument(
+        "--crop",
+        action="store_true",
+        default=False,
+        help="Crop results of the plot vertically",
     )
     parser.add_argument(
         "--no-print",
@@ -484,12 +482,16 @@ def convert_mastery_args(args: argparse.Namespace) -> None:
 
 def simulation_args_description(args: argparse.Namespace) -> list[str]:
     desc = []
-    if args.reward != "coins":
-        desc.append(f"reward {args.reward}")
     if args.orb_hits != 1.0:
         desc.append(f"orb hits {args.orb_hits:.2%}")
-    if args.log_scale:
-        desc.append("log scale")
+    if args.reward != "coins":
+        desc.append(f"reward {args.reward}")
+    if args.elapsed:
+        desc.append("per hour")
+    if args.truncate:
+        desc.append("truncated")
+    if args.crop:
+        desc.append("cropped")
     return desc
 
 
@@ -608,7 +610,7 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
     # Assuming "Package After Boss" lab, a package will guaranteed spawn every wave
     # following a boss spawn (ie, when `wave - 1` was a boss wave). Otherwise, the
     # chance is based on workshop, labs, and module effects.
-    package_spawn = sim.recovery_package_chance
+    package_spawn = RECOVERY_PACKAGE_CHANCE
     if (wave - 1) % boss_period == 0:
         package_spawn = 1
 
@@ -956,19 +958,33 @@ def difference_sims_vs_baseline(
 
     for sim, run_result in sim_results:
         difference_results = []
-        difference = 0.0
         for wave_result in run_result.wave_results:
             baseline_rewards = rewards_at_time(
                 baseline_results, wave_result.elapsed_time
             )
             differenced_rewards = (wave_result.cumulative_rewards - baseline_rewards)
-            difference = reward_value(sim, differenced_rewards)
             difference_results.append(
                 dataclasses.replace(wave_result, cumulative_rewards=differenced_rewards)
             )
         yield sim, dataclasses.replace(
             run_result, wave_results=difference_results
         )
+
+def normalize_sims_vs_elapsed(
+    sim_results: list[tuple[Simulation, SimulationRunResult]]
+) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    for sim, run_result in sim_results:
+        wave_results = iter(run_result.wave_results)
+        normalized_results = [
+            copy.deepcopy(next(wave_results)),
+        ]
+        for wave_result in wave_results:
+            assert wave_result.elapsed_time != 0.0
+            normalized_rewards = wave_result.cumulative_rewards * (1 / wave_result.elapsed_time)
+            normalized_results.append(
+                dataclasses.replace(wave_result, cumulative_rewards=normalized_rewards)
+            )
+        yield sim, dataclasses.replace(run_result, wave_results=normalized_results)
 
 def normalize_sims_vs_baseline(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
@@ -1030,7 +1046,6 @@ def make_sim(args: argparse.Namespace) -> Simulation:
     return Simulation(
         orb_hits=args.orb_hits,
         reward=args.reward,
-        recovery_package_chance=args.package_chance,
         cash=args.cash,
         coin=args.coin,
         critical_coin=args.critical_coin,
@@ -1226,8 +1241,6 @@ def render_plot(plot: Plot, /, show: bool = True, output: str | None = None):
         ax.set_ylim(top=plot.top)
     if plot.bottom is not None:
         ax.set_ylim(bottom=plot.bottom)
-    if plot.log_scale:
-        ax.set_yscale("log")
 
     ax.set_xlabel(plot.xlabel)
     ax.set_ylabel(plot.ylabel)
@@ -1279,6 +1292,8 @@ def subcommand_waves(args: argparse.Namespace) -> Plot:
         waves_sim(config, max_wave) for max_wave in sorted(args.waves, reverse=True)
     ]
     sim_results = list(evaluate_sims(sims))
+    if args.elapsed:
+        sim_results = list(normalize_sims_vs_elapsed(sim_results))
     sim_results = list(annotate_sims_vs_min(sim_results))
     if args.print:
         print_sim_results(sim_results)
@@ -1292,8 +1307,9 @@ def subcommand_waves(args: argparse.Namespace) -> Plot:
         ]
     )
     ylabel = args.reward
+    if args.elapsed:
+        ylabel += f" per hour"
     plot = plot_sim_results(title, ylabel, sim_results)
-    plot.log_scale = args.log_scale
     return plot
 
 
@@ -1305,6 +1321,8 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
 
     sims = [tiers_sim(config, tier, wave) for tier, wave in args.tiers]
     sim_results = list(evaluate_sims(sims))
+    if args.elapsed:
+        sim_results = list(normalize_sims_vs_elapsed(sim_results))
     sim_results = list(annotate_sims_vs_min(sim_results))
     if args.print:
         print_sim_results(sim_results)
@@ -1317,8 +1335,9 @@ def subcommand_tiers(args: argparse.Namespace) -> Plot:
         ]
     )
     ylabel = args.reward
+    if args.elapsed:
+        ylabel += f" per hour"
     plot = plot_sim_results(title, ylabel, sim_results)
-    plot.log_scale = args.log_scale
     return plot
 
 
@@ -1337,7 +1356,10 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
         for mastery in MASTERY_DISPLAY_NAMES.keys()
     ]
     sim_results = list(evaluate_sims(sims))
-    sim_results = list(truncate_sims_to_shortest(sim_results))
+    if args.elapsed:
+        sim_results = list(normalize_sims_vs_elapsed(sim_results))
+    if args.truncate:
+        sim_results = list(truncate_sims_to_shortest(sim_results))
     if args.relative:
         sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
         if args.roi:
@@ -1362,13 +1384,14 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
         ]
     )
     ylabel = args.reward
+    if args.elapsed:
+        ylabel += f" per hour"
     if args.relative:
         ylabel += f" relative to {baseline_sim_name}"
     elif args.difference:
         ylabel += f" difference from {baseline_sim_name}"
 
     plot = plot_sim_results(title, ylabel, sim_results)
-    plot.log_scale = args.log_scale
     if args.relative and args.crop:
         plot.bottom, plot.top = calculate_margins(sim_results)
     return plot
@@ -1383,7 +1406,10 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     sims = [mastery_sim(config, args.mastery, level) for level in MASTERY_LEVELS]
     baseline_sim = sims[0]
     sim_results = list(evaluate_sims(sims))
-    sim_results = list(truncate_sims_to_shortest(sim_results))
+    if args.elapsed:
+        sim_results = list(normalize_sims_vs_elapsed(sim_results))
+    if args.truncate:
+        sim_results = list(truncate_sims_to_shortest(sim_results))
     if args.relative:
         sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim.name))
     else:
@@ -1406,12 +1432,13 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
         ]
     )
     ylabel = args.reward
+    if args.elapsed:
+        ylabel += f" per hour"
     if args.relative:
         ylabel += f" relative to {baseline_sim.name}"
     elif args.difference:
         ylabel += f" difference from {baseline_sim.name}"
     plot = plot_sim_results(title, ylabel, sim_results)
-    plot.log_scale = args.log_scale
     if args.relative and args.crop:
         plot.bottom, plot.top = calculate_margins(sim_results)
     return plot
@@ -1481,8 +1508,6 @@ if __name__ == "__main__":
 
     if not 0.0 <= args.orb_hits <= 1.0:
         parser.error("--orb-hits must be between 0.0 and 1.0")
-    if not 0.0 <= args.package_chance <= 1.0:
-        parser.error("--package-chance must be between 0.0 and 1.0")
 
     if args.subcommand == "waves":
         plot = subcommand_waves(args)
