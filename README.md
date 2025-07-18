@@ -17,6 +17,14 @@ Calculate the effects of card masteries on cumulative run rewards.
    pip install -r requirements.txt
    ```
 
+### Generate interesting figures
+
+```
+rm -rf ./figures
+mkdir ./figures
+./render_figures ./figures
+```
+
 ### Compare different tier:wave combinations
 
 ```
@@ -100,30 +108,137 @@ each option is `locked` if not specified.
 
 ## Results summary
 
-Coins (assuming orbs hit more than 75% of enemies):
-- Level 2
-  - For 10k wave runs, EO# > Coin# > WA# > WS# > IS# > CritCoin#
-  - For 3k-8k wave runs, EO# > WA# > Coin#
-- Level 9
-  - For 10k wave runs, EO# > Coin# > (WA# = WS#) > IS# > CritCoin#
-  - For 4k-7k wave runs, EO# > WA# > Coin#
+> tl;dr: RPC#, Cash#, EB#, and EO#; followed by WS# and WA#
 
-Elite cells:
-- Level 2
-  - For 10k wave runs, EB# > IS# > WS#
-  - For 9.5k wave runs, (EB# = IS#) > WS#
-- Level 9
-  - For 10k wave runs, EB# > IS# > WS#
-  - For 7k wave runs, (EB# = IS#) > WS#
+To determine which mastery has the best impact on your economy per stone spent,
+you have to compare each reward you care about farming under different length
+and difficulty configurations. We'll summarize the long and short farm run
+configurations, and then look at whether short farm runs on higher tiers are
+feasible with WA#.
 
-Reroll shards:
-- For 10k wave runs, Cash# > EB# > WS# > IS#
-- For 6.5k wave runs, Cash# > (EB# = WS#) > IS#
+Figures
+- [relative coins per hour from all masteries at level 0](./figures/compare-coins-T11W10000-L0-rel-dt.png)
+- [relative coins per hour per stone from all masteries at level 0](./figures/compare-coins-T11W10000-L0-rel-roi-dt.png)
+- [relative coins per hour from all masteries at level 2](./figures/compare-coins-T11W10000-L2-rel-dt.png)
+- [relative coins per hour per stone from all masteries at level 2](./figures/compare-coins-T11W10000-L2-rel-roi-dt.png)
+- [relative coins per hour from all masteries at level 9](./figures/compare-coins-T11W10000-L9-rel-dt.png)
+- [relative coins per hour per stone from all masteries at level 9](./figures/compare-coins-T11W10000-L9-rel-roi-dt.png)
+- [relative cells per hour from all masteries at level 0](./figures/compare-cells-T11W10000-L0-rel-dt.png)
+- [relative cells per hour from all masteries at level 2](./figures/compare-cells-T11W10000-L2-rel-dt.png)
+- [relative cells per hour from all masteries at level 9](./figures/compare-cells-T11W10000-L9-rel-dt.png)
+- [relative modules per hour from all masteries at level 0](./figures/compare-modules-T11W10000-L0-rel-dt.png)
+- [relative rerolls per hour from all masteries at level 0](./figures/compare-rerolls-T11W10000-L0-rel-dt.png)
+- [relative rerolls per hour from all masteries at level 0 with Cash# at level 0](./figures/compare-rerolls-T11W10000-L0-rel-Cash0-dt.png)
+- [relative rerolls per hour from all masteries at level 2 with Cash# at level 0](./figures/compare-rerolls-T11W10000-L2-rel-Cash0-dt.png)
+- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA0-dt.png)
+- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA2-dt.png)
+- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA9-dt.png)
+- [cells between T11-T14](./figures/tiers-cells-T11W10000-T12W6000-T13W5000-T14W3500-dt.png)
+- [rerolls between T11-T14 with Cash# at level 0](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash0-EB0-dt.png)
+- [rerolls between T11-T14 with Cash# at level 9](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash9-EB9-dt.png)
 
-Module shards:
-- RPC# >> WS# > Baseline > IS#
+### Long farm run
 
-## Methodology
+Configuration
+- T11 W10k
+- Relative comparison of all masteries
+- Normalized against elapsed time
+- Compared per stone cost of mastery
+- Assume orbs hit all enemies
+
+Results
+- Coins:
+  - Level 0: EO# >> WS# >= WA# >= Coin# >> CritCoin# >= IS#
+  - Level 2: EO# >> Coin# >= WA# >= WS# > IS# >= CritCoin#
+  - Level 9: EO# >> Coin# > WS# >= WA# > IS# >= CritCoin#
+
+- Elite cells:
+  - Level 0: EB# > WS# > IS#
+  - Level 2: EB# > WS# >= IS#
+  - Level 9: EB# > IS# >= WS#
+
+- Reroll shards:
+  - If you assume you already have Cash#0:
+    - Level 0: WS# > EB# > IS#
+    - Level 2: Cash# > WS# > EB# > IS#
+  - If you don't assume Cash#0:
+    - Level 2: Cash# > WS# > Baseline >= IS#
+
+- Module shards:
+  - Level 0: RPC# >> WS# > Baseline >= IS#
+
+### Short farm run
+
+Configuration
+- Same as long farm run, except T11 W5k
+
+Results
+- Coins:
+  - Level 0: EO# > WA# > WS# > Coin# >> IS# >= CritCoin#
+  - Level 2: EO# > WA# >> Coin# > WS# > IS# > CritCoin#
+  - Level 9: EO# >> WA# > Coin# > WS# >= IS# > CritCoin#
+
+- Elite cells:
+  - Level 0: Same as long run
+  - Level 2: EB# >= IS# > WS#
+  - Level 9: EB# = IS# >= WS#
+
+- Reroll shards:
+  - Same as long run
+
+- Module shards:
+  - Same as long run
+
+### Higher tiers
+
+Configuration
+- Relative comparison of all difficulties
+  - Assume my own farm stats: T11W10000, T12W6000, T13W5000, T14W3500
+- Varying WA#, Cash#, and EB#
+- Normalized against elapsed time
+- Assume orbs hit all enemies
+
+Results:
+- Coins:
+  - WA# at level 0:
+    - T12: Same as T11
+    - T13: +11% from T11
+    - T14: +16% from T11
+  - WA# at level 2:
+    - T12: +3% from T11
+    - T13: +15% from T11
+    - T14: +20% from T11
+  - WA# at level 9:
+    - T12: +9% from T11
+    - T13: +26% from T11
+    - T14: +33% from T11
+- Cells: About a 10-20% reduction on higher tiers
+  - T12: -20% from T11
+  - T13: -20% from T11
+  - T14: -10% from T11
+- Rerolls:
+  - Cash# and EB# at level 0:
+    - T12: +8% from T11
+    - T13: +20% from T11
+    - T14: +40% from T11
+  - Cash# and EB# at level 9:
+    - T12: -7% from T11
+    - T13: -2% from T11
+    - T14: -4% from T11
+- Modules: No variance
+
+### Analysis
+
+Coin gain from WA# in higher tiers doesn't exceed the benefits of Coin# unless
+farming at T13. For example, comparing WA#0 to Coin#0 at T13: +11% vs +3%.
+However, cell income is dropped by 20% for that configuration, so this is only
+a viable option for people who can afford to deprioritize cell income.
+
+If you could only pick four, RPC#, Cash#, EB#, and EO# are each best in their
+respective classes. WS# and WA# share the honorable mention slot for their
+versatility.
+
+## Estimation methodology
 
 Runs are simulated sequences of waves, emitting events as probabilities. Rewards
 are calculated each wave by multiplying the event probabilities to the results
@@ -192,8 +307,7 @@ We make the following definitions:
 - `r(w)`: the function of per-event rewards for a given wave `w`
 - `e(w) * r(w)`: the piecewise product of event probability and event rewards
 - `f(w)`: `e(w) * r(w)`
-- `F(a, b, w)`: the integral of `f(w)` from wave `a` to just before wave `b`
-  - `∫{a,b} f(w) dw`
+Then the cumulative reward is `∫{a,b} f(w) dw`
 
 However, our goal is to model rewards with respect to time, not waves. So we
 have to transform from any given range of time to the corresponding range of
@@ -203,8 +317,7 @@ waves. The limits of integration are the time points of the wave simulated.
 - `e(t)`: `e(w(t))`
 - `r(t)`: `r(w(t))`
 - `f(t)`: `e(t) * r(t)`
-- `F(a, b, t)`: the integral of `f(t)` from time `a` to just before time `b`
-  - `∫{a,b} f(t) dt`
+Then the cumulative reward is `∫{a,b} f(t) dt`
 
 Masteries produce altered versions of the above functions. To demonstrate the
 impact each mastery should have, we first have to define these functions for the

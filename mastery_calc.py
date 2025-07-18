@@ -423,7 +423,6 @@ def add_common_args(parser: argparse.ArgumentParser):
     )
     parser.add_argument("--output", "-o", default=None, help="Filename for saved plot")
 
-
     # Masteries
     parser.add_argument(
         "--cash",
@@ -480,10 +479,10 @@ def add_common_args(parser: argparse.ArgumentParser):
         help="Wave skip mastery level",
     )
     parser.add_argument(
-        "--enemy-balance-with-cash",
+        "--rerolls-with-cash",
         choices=MASTERY_LEVEL_NAMES,
         default=None,
-        help="The sim changing enemy balance should set cash to this level",
+        help="The sim changing reroll-affecting masteries (EB#, IS#, WS#) should set cash to this level",
     )
 
 
@@ -505,7 +504,7 @@ def convert_mastery_args(args: argparse.Namespace) -> None:
     args.recovery_package = mastery_level(args.recovery_package)
     args.wave_accelerator = mastery_level(args.wave_accelerator)
     args.wave_skip = mastery_level(args.wave_skip)
-    args.enemy_balance_with_cash = mastery_level(args.enemy_balance_with_cash)
+    args.rerolls_with_cash = mastery_level(args.rerolls_with_cash)
 
 
 def common_args_description(args: argparse.Namespace, baseline_name: str) -> list[str]:
@@ -558,8 +557,10 @@ def common_args_description(args: argparse.Namespace, baseline_name: str) -> lis
         )
     if args.wave_skip is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['wave-skip']}#{args.wave_skip}")
-    if args.enemy_balance_with_cash is not None:
-        desc.append(f"{MASTERY_DISPLAY_NAMES['enemy-balance']}# with {MASTERY_DISPLAY_NAMES['cash']}#{args.enemy_balance_with_cash}")
+    if args.rerolls_with_cash is not None:
+        desc.append(
+            f"rerolls with {MASTERY_DISPLAY_NAMES['cash']}#{args.rerolls_with_cash}"
+        )
 
     return desc
 
@@ -581,12 +582,8 @@ def spawn_rate_index(sim: Simulation, wave: int):
         if sim.wave_accelerator is None
         else WAVE_ACCELERATOR_MASTERY_TABLE[sim.wave_accelerator]
     )
-    index = max(
-        i for i, min_wave in enumerate(spawn_rate_row) if min_wave <= wave
-    )
-    assert (
-        0 <= index < len(SPAWN_RATE_SEQUENCE)
-    ), f"Invalid spawn rate index: {index}"
+    index = max(i for i, min_wave in enumerate(spawn_rate_row) if min_wave <= wave)
+    assert 0 <= index < len(SPAWN_RATE_SEQUENCE), f"Invalid spawn rate index: {index}"
     return index
 
 
@@ -655,7 +652,9 @@ def wave_skip_bonus(events: Events, noskip: float, skip: float) -> float:
     return (1 - events.wave_skip) * noskip + (events.wave_skip * skip)
 
 
-def calculate_coins(sim: Simulation, events: Events, previous_rewards: Rewards) -> float:
+def calculate_coins(
+    sim: Simulation, events: Events, previous_rewards: Rewards
+) -> float:
     coin_bonus = TIER_COIN_BONUS[sim.tier - 1]
     if sim.coin is not None:
         coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
@@ -687,7 +686,9 @@ def calculate_coins(sim: Simulation, events: Events, previous_rewards: Rewards) 
     return wave_skip_bonus(events, coins, previous_rewards.coins * WAVE_SKIP_BONUS)
 
 
-def calculate_cells(sim: Simulation, events: Events, previous_rewards: Rewards) -> float:
+def calculate_cells(
+    sim: Simulation, events: Events, previous_rewards: Rewards
+) -> float:
     # Elites drop a random number of cells between the min and max values for the tier.
     # Normally that's 1-TIER, but higher tiers have a floor above 1.
     cells_per_elite = (
@@ -958,13 +959,12 @@ def difference_sims_vs_baseline(
             baseline_rewards = rewards_at_time(
                 baseline_results, wave_result.elapsed_time
             )
-            differenced_rewards = (wave_result.cumulative_rewards - baseline_rewards)
+            differenced_rewards = wave_result.cumulative_rewards - baseline_rewards
             difference_results.append(
                 dataclasses.replace(wave_result, cumulative_rewards=differenced_rewards)
             )
-        yield sim, dataclasses.replace(
-            run_result, wave_results=difference_results
-        )
+        yield sim, dataclasses.replace(run_result, wave_results=difference_results)
+
 
 def normalize_sims_vs_elapsed(
     sim_results: list[tuple[Simulation, SimulationRunResult]]
@@ -976,7 +976,9 @@ def normalize_sims_vs_elapsed(
         ]
         for wave_result in wave_results:
             assert wave_result.elapsed_time != 0.0
-            normalized_rewards = wave_result.cumulative_rewards * (1 / wave_result.elapsed_time)
+            normalized_rewards = wave_result.cumulative_rewards * (
+                1 / wave_result.elapsed_time
+            )
             normalized_results.append(
                 dataclasses.replace(wave_result, cumulative_rewards=normalized_rewards)
             )
@@ -1101,7 +1103,7 @@ def mastery_sim(
     sim: Simulation,
     mastery: str,
     level: int | None,
-    enemy_balance_with_cash: int | None,
+    rerolls_with_cash: int | None,
 ) -> Simulation:
     sim = dataclasses.replace(sim, mastery=mastery, level=level)
 
@@ -1117,19 +1119,17 @@ def mastery_sim(
     elif mastery == "critical-coin":
         return dataclasses.replace(sim, critical_coin=level)
     elif mastery == "enemy-balance":
-        return dataclasses.replace(
-            sim, enemy_balance=level, cash=enemy_balance_with_cash
-        )
+        return dataclasses.replace(sim, enemy_balance=level, cash=rerolls_with_cash)
     elif mastery == "extra-orb":
         return dataclasses.replace(sim, extra_orb=level)
     elif mastery == "intro-sprint":
-        return dataclasses.replace(sim, intro_sprint=level)
+        return dataclasses.replace(sim, intro_sprint=level, cash=rerolls_with_cash)
     elif mastery == "recovery-package":
         return dataclasses.replace(sim, recovery_package=level)
     elif mastery == "wave-accelerator":
         return dataclasses.replace(sim, wave_accelerator=level)
     elif mastery == "wave-skip":
-        return dataclasses.replace(sim, wave_skip=level)
+        return dataclasses.replace(sim, wave_skip=level, cash=rerolls_with_cash)
     raise ValueError(f"Invalid mastery: {mastery}")
 
 
@@ -1357,7 +1357,7 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
     baseline_sim = dataclasses.replace(config, name=baseline_sim_name)
 
     sims = [baseline_sim] + [
-        mastery_sim(config, mastery, args.level, args.enemy_balance_with_cash)
+        mastery_sim(config, mastery, args.level, args.rerolls_with_cash)
         for mastery in MASTERY_DISPLAY_NAMES.keys()
     ]
     sim_results = normalize_sims(args, list(evaluate_sims(sims)), baseline_sim_name)
@@ -1380,7 +1380,7 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     config.max_waves = args.wave
 
     sims = [
-        mastery_sim(config, args.mastery, level, args.enemy_balance_with_cash)
+        mastery_sim(config, args.mastery, level, args.rerolls_with_cash)
         for level in MASTERY_LEVELS
     ]
     baseline_sim = sims[0]
