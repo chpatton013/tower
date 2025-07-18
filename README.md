@@ -98,7 +98,7 @@ each option is `locked` if not specified.
 
 ## Results summary
 
-Coins (assuming orbs hit every enemy):
+Coins (assuming orbs hit more than 75% of enemies):
 - Level 2
   - For 10k wave runs, EO# > Coin# > WA# > WS# > IS# > CritCoin#
   - For 3k-8k wave runs, EO# > WA# > Coin#
