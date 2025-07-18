@@ -648,27 +648,31 @@ def calculate_coins(sim: Simulation, events: Events, previous_rewards: Rewards) 
     coin_bonus = TIER_COIN_BONUS[sim.tier - 1]
     if sim.coin is not None:
         coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
+
+    orb_bonus = 1.0
     if sim.extra_orb is not None:
-        # TODO: Confirm if EO# affects all derivative scatter splits, or only the ones
-        # that are directly hit by orbs.
-        coin_bonus *= 1 + ((EXTRA_ORB_MASTERY_TABLE[sim.extra_orb] - 1) * sim.orb_hits)
+        orb_bonus *= 1 + ((EXTRA_ORB_MASTERY_TABLE[sim.extra_orb] - 1) * sim.orb_hits)
 
     coins_per_enemy = {
         name: drop * coin_bonus for name, drop in COIN_DROP_TABLE.items()
     }
     if sim.critical_coin is not None:
         coins_per_enemy["basic"] *= 1.0 + CRITICAL_COIN_MASTERY_TABLE[sim.critical_coin]
-    # Each scatter splits in half 4 times. The original scatter and each of its splits
-    # give the same amount of coins.
-    coins_per_enemy["scatter"] *= sum(1 << i for i in range(0, 5))
     # Elites are not affected by BH coin bonus
     coins_per_enemy["scatter"] /= BLACK_HOLE_COIN_BONUS
     coins_per_enemy["vampire"] /= BLACK_HOLE_COIN_BONUS
     coins_per_enemy["ray"] /= BLACK_HOLE_COIN_BONUS
 
-    coins = sum(
-        events.enemies[name] * coins_per_enemy[name] for name in events.enemies.keys()
-    )
+    coins = 0.0
+    for name, count in events.enemies.items():
+        enemy_coins = count * coins_per_enemy[name] * orb_bonus
+        # Each scatter splits in half 4 times. The original scatter and each of its
+        # splits give the same amount of coins, but only scatter splits struck by orbs
+        # give the EO# bonus. We'll assume that most scatters make it inside the orb
+        # line before splitting, so only count the orb bonus for the original scatter.
+        if name == "scatter":
+            enemy_coins += sum(1 << i for i in range(1, 5)) * coins_per_enemy["scatter"]
+        coins += enemy_coins
     return wave_skip_bonus(events, coins, previous_rewards.coins * WAVE_SKIP_BONUS)
 
 

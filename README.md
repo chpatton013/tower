@@ -284,12 +284,15 @@ This results in a linear increase in cell income:
 
 EO# increases all coin rewards for enemies hit by orbs:
 - `r'(w) = w|{0,100}:0; {100,*}:1| * <0.33,...,4.0> * EO#`
+In practice, this will be most enemies except for all scatter splits, which
+represent a more-significant portion of enemies early on in a run. That causes
+the relative graph to follow an asymptote instead of a plain horizontal line.
 
 This results in a linear increase in coin income:
 - Absolute: the exponential and linear components of the curve have higher
   coefficients, scaling them vertically
-- Relative: the ratio to baseline is a constant, which make horizontal lines of
-  form `y = k * EO#`
+- Relative: the ratio to baseline is a positive horizontal asymptote
+  approaching the line `y = k * EO#`
 - Difference: the difference between functions accelerates towards a linear
   equation of the form `y = k * EO# * t`
 
