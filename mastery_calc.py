@@ -344,7 +344,8 @@ def tier_and_wave_arg(arg: str) -> tuple[int, int]:
     return int(tier), int(wave)
 
 
-def add_tier_args(parser: argparse.ArgumentParser):
+def add_common_args(parser: argparse.ArgumentParser):
+    # Simulation events
     parser.add_argument(
         "--tier",
         type=int,
@@ -352,15 +353,14 @@ def add_tier_args(parser: argparse.ArgumentParser):
         default=1,
         help="Tier to simulate",
     )
-
-
-def add_simulation_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--orb-hits",
         type=float,
         default=1.0,
         help="Average portion of enemies hit by orbs [0.0-1.0]",
     )
+
+    # Reward normalization
     parser.add_argument(
         "--reward",
         type=str,
@@ -369,11 +369,32 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         help="Which reward to plot and compare",
     )
     parser.add_argument(
+        "--difference",
+        "-d",
+        action="store_true",
+        default=False,
+        help="Subtract the baseline configuration from all results",
+    )
+    parser.add_argument(
         "--elapsed",
         action="store_true",
         default=False,
         help="Normalize results by elapsed time",
     )
+    parser.add_argument(
+        "--relative",
+        "-r",
+        action="store_true",
+        default=False,
+        help="Normalize all results against the baseline configuration",
+    )
+    parser.add_argument(
+        "--roi",
+        action="store_true",
+        help="Normalize all results against mastery stone cost",
+    )
+
+    # Output options
     parser.add_argument(
         "--truncate",
         action="store_true",
@@ -403,7 +424,7 @@ def add_simulation_args(parser: argparse.ArgumentParser):
     parser.add_argument("--output", "-o", default=None, help="Filename for saved plot")
 
 
-def add_mastery_args(parser: argparse.ArgumentParser):
+    # Masteries
     parser.add_argument(
         "--cash",
         choices=MASTERY_LEVEL_NAMES,
@@ -458,6 +479,12 @@ def add_mastery_args(parser: argparse.ArgumentParser):
         default=None,
         help="Wave skip mastery level",
     )
+    parser.add_argument(
+        "--enemy-balance-with-cash",
+        choices=MASTERY_LEVEL_NAMES,
+        default=None,
+        help="The sim changing enemy balance should set cash to this level",
+    )
 
 
 def mastery_level(name: str | None) -> int | None:
@@ -478,81 +505,63 @@ def convert_mastery_args(args: argparse.Namespace) -> None:
     args.recovery_package = mastery_level(args.recovery_package)
     args.wave_accelerator = mastery_level(args.wave_accelerator)
     args.wave_skip = mastery_level(args.wave_skip)
+    args.enemy_balance_with_cash = mastery_level(args.enemy_balance_with_cash)
 
 
-def simulation_args_description(args: argparse.Namespace) -> list[str]:
+def common_args_description(args: argparse.Namespace, baseline_name: str) -> list[str]:
     desc = []
+
+    # Simulation events
+    if args.tier is not None:
+        assert args.wave is not None
+        desc.append(f"T{args.tier}W{args.wave}")
     if args.orb_hits != 1.0:
-        desc.append(f"orb hits {args.orb_hits:.2%}")
-    if args.reward != "coins":
-        desc.append(f"reward {args.reward}")
+        desc.append(f"orbs {args.orb_hits:.2%}")
+
+    # Reward normalization
+    desc.append(args.reward)
     if args.elapsed:
         desc.append("per hour")
+    if args.difference:
+        desc.append(f"minus {baseline_name}")
+    if args.relative:
+        desc.append(f"over {baseline_name}")
+    if args.roi:
+        desc.append("per stone")
+
+    # Output options
     if args.truncate:
         desc.append("truncated")
     if args.crop:
         desc.append("cropped")
-    return desc
 
-
-def mastery_args_description(args: argparse.Namespace) -> list[str]:
-    desc = []
-    if args.cash:
+    # Masteries
+    if args.cash is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['cash']}#{args.cash}")
-    if args.coin:
+    if args.coin is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['coin']}#{args.coin}")
-    if args.critical_coin:
+    if args.critical_coin is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['critical-coin']}#{args.critical_coin}")
-    if args.enemy_balance:
+    if args.enemy_balance is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['enemy-balance']}#{args.enemy_balance}")
-    if args.extra_orb:
+    if args.extra_orb is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['extra-orb']}#{args.extra_orb}")
-    if args.intro_sprint:
+    if args.intro_sprint is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['intro-sprint']}#{args.intro_sprint}")
-    if args.recovery_package:
+    if args.recovery_package is not None:
         desc.append(
             f"{MASTERY_DISPLAY_NAMES['recovery-package']}#{args.recovery_package}"
         )
-    if args.wave_accelerator:
+    if args.wave_accelerator is not None:
         desc.append(
             f"{MASTERY_DISPLAY_NAMES['wave-accelerator']}#{args.wave_accelerator}"
         )
-    if args.wave_skip:
+    if args.wave_skip is not None:
         desc.append(f"{MASTERY_DISPLAY_NAMES['wave-skip']}#{args.wave_skip}")
+    if args.enemy_balance_with_cash is not None:
+        desc.append(f"{MASTERY_DISPLAY_NAMES['enemy-balance']}# with {MASTERY_DISPLAY_NAMES['cash']}#{args.enemy_balance_with_cash}")
+
     return desc
-
-
-def add_relative_args(parser: argparse.ArgumentParser):
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--relative",
-        "-r",
-        action="store_true",
-        default=False,
-        help="Normalize all results against the baseline configuration",
-    )
-    group.add_argument(
-        "--difference",
-        "-d",
-        action="store_true",
-        default=False,
-        help="Subtract the baseline configuration from all results",
-    )
-
-
-def add_wave_args(parser: argparse.ArgumentParser):
-    parser.add_argument("wave", type=int, help="Wave number to simulate")
-
-
-def relative_args_description(
-    args: argparse.Namespace, baseline_sim_name: str
-) -> list[str]:
-    if args.relative:
-        return [f"relative to {baseline_sim_name}"]
-    elif args.difference:
-        return [f"difference from {baseline_sim_name}"]
-    else:
-        return []
 
 
 # Simulation logic
@@ -904,19 +913,6 @@ def truncate_sims_to_shortest(
         )
 
 
-def annotate_sims_vs_min(
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
-    min_value = min(
-        reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
-        for sim, run_result in sim_results
-    )
-    for sim, run_result in sim_results:
-        run_max = reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
-        relative = (run_max / min_value - 1.0) if min_value != 0 else 0.0
-        yield sim, dataclasses.replace(run_result, relative=relative)
-
-
 def annotate_sims_vs_baseline(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
     baseline_sim_name: str,
@@ -986,6 +982,7 @@ def normalize_sims_vs_elapsed(
             )
         yield sim, dataclasses.replace(run_result, wave_results=normalized_results)
 
+
 def normalize_sims_vs_baseline(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
     baseline_sim_name: str,
@@ -1039,11 +1036,36 @@ def normalize_sims_vs_stone_cost(
         )
 
 
+def normalize_sims(
+    args: argparse.Namespace,
+    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    baseline_sim_name: str,
+) -> list[tuple[Simulation, SimulationRunResult]]:
+    if args.truncate:
+        sim_results = list(truncate_sims_to_shortest(sim_results))
+    if args.elapsed:
+        sim_results = list(normalize_sims_vs_elapsed(sim_results))
+    if args.relative:
+        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
+        if args.roi:
+            sim_results = list(normalize_sims_vs_stone_cost(sim_results))
+        else:
+            sim_results = list(annotate_sims_vs_stone_cost(sim_results))
+    else:
+        sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim_name))
+        sim_results = list(annotate_sims_vs_stone_cost(sim_results))
+    if args.difference:
+        sim_results = list(difference_sims_vs_baseline(sim_results, baseline_sim_name))
+
+    return sim_results
+
+
 # Simulation config factories
 
 
 def make_sim(args: argparse.Namespace) -> Simulation:
     return Simulation(
+        tier=args.tier,
         orb_hits=args.orb_hits,
         reward=args.reward,
         cash=args.cash,
@@ -1075,7 +1097,12 @@ def waves_sim(sim: Simulation, max_wave: int) -> Simulation:
     )
 
 
-def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
+def mastery_sim(
+    sim: Simulation,
+    mastery: str,
+    level: int | None,
+    enemy_balance_with_cash: int | None,
+) -> Simulation:
     sim = dataclasses.replace(sim, mastery=mastery, level=level)
 
     if level is None:
@@ -1090,7 +1117,9 @@ def mastery_sim(sim: Simulation, mastery: str, level: int | None) -> Simulation:
     elif mastery == "critical-coin":
         return dataclasses.replace(sim, critical_coin=level)
     elif mastery == "enemy-balance":
-        return dataclasses.replace(sim, enemy_balance=level)
+        return dataclasses.replace(
+            sim, enemy_balance=level, cash=enemy_balance_with_cash
+        )
     elif mastery == "extra-orb":
         return dataclasses.replace(sim, extra_orb=level)
     elif mastery == "intro-sprint":
@@ -1189,10 +1218,20 @@ def interesting_waves(sim: Simulation) -> set[int]:
 
 
 def plot_sim_results(
+    args: argparse.Namespace,
     title: str,
-    ylabel: str,
     sim_results: list[tuple[Simulation, SimulationRunResult]],
 ) -> Plot:
+    ylabel = args.reward
+    if args.elapsed:
+        ylabel += f" per hour"
+    if args.difference:
+        ylabel += f" difference"
+    if args.relative:
+        ylabel += f" relative"
+    if args.roi:
+        ylabel += f" relative"
+
     plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel=ylabel)
     for sim, run_result in sim_results:
         line = PlotLine(
@@ -1212,6 +1251,9 @@ def plot_sim_results(
 
     for line in plot.lines:
         line.xs = [x / 3600 / GAME_SPEED for x in line.xs]
+
+    if args.relative and args.crop:
+        plot.bottom, plot.top = calculate_margins(sim_results)
 
     return plot
 
@@ -1282,140 +1324,67 @@ def print_sim_results(sim_results: list[tuple[Simulation, SimulationRunResult]])
 # Subcommand implementations
 
 
-def subcommand_waves(args: argparse.Namespace) -> Plot:
-    args.mastery = None
-    convert_mastery_args(args)
-    config = make_sim(args)
-    config.tier = args.tier
-
-    sims = [
-        waves_sim(config, max_wave) for max_wave in sorted(args.waves, reverse=True)
-    ]
-    sim_results = list(evaluate_sims(sims))
-    if args.elapsed:
-        sim_results = list(normalize_sims_vs_elapsed(sim_results))
-    sim_results = list(annotate_sims_vs_min(sim_results))
-    if args.print:
-        print_sim_results(sim_results)
-
-    title = ", ".join(
-        [
-            f"Simulating waves {', '.join(str(wave) for wave in args.waves)}",
-            f"tier {args.tier}",
-            *simulation_args_description(args),
-            *mastery_args_description(args),
-        ]
-    )
-    ylabel = args.reward
-    if args.elapsed:
-        ylabel += f" per hour"
-    plot = plot_sim_results(title, ylabel, sim_results)
-    return plot
-
-
 def subcommand_tiers(args: argparse.Namespace) -> Plot:
     args.mastery = None
+    args.tier = None
     convert_mastery_args(args)
-    args.tiers.sort()
     config = make_sim(args)
 
     sims = [tiers_sim(config, tier, wave) for tier, wave in args.tiers]
-    sim_results = list(evaluate_sims(sims))
-    if args.elapsed:
-        sim_results = list(normalize_sims_vs_elapsed(sim_results))
-    sim_results = list(annotate_sims_vs_min(sim_results))
+    baseline_sim_name = sims[0].name
+    args.tiers.sort()
+    sims.sort(key=lambda sim: sim.name)
+    sim_results = normalize_sims(args, list(evaluate_sims(sims)), baseline_sim_name)
     if args.print:
         print_sim_results(sim_results)
 
     title = ", ".join(
         [
             f"Simulating tiers {', '.join(f'T{tier}:W{wave}' for tier, wave in args.tiers)}",
-            *simulation_args_description(args),
-            *mastery_args_description(args),
+            *common_args_description(args, baseline_sim_name),
         ]
     )
-    ylabel = args.reward
-    if args.elapsed:
-        ylabel += f" per hour"
-    plot = plot_sim_results(title, ylabel, sim_results)
-    return plot
+    return plot_sim_results(args, title, sim_results)
 
 
 def subcommand_compare(args: argparse.Namespace) -> Plot:
     args.level = mastery_level(args.level)
     convert_mastery_args(args)
     config = make_sim(args)
-    config.tier = args.tier
     config.max_waves = args.wave
 
     baseline_sim_name = "baseline"
     baseline_sim = dataclasses.replace(config, name=baseline_sim_name)
 
     sims = [baseline_sim] + [
-        mastery_sim(config, mastery, args.level)
+        mastery_sim(config, mastery, args.level, args.enemy_balance_with_cash)
         for mastery in MASTERY_DISPLAY_NAMES.keys()
     ]
-    sim_results = list(evaluate_sims(sims))
-    if args.elapsed:
-        sim_results = list(normalize_sims_vs_elapsed(sim_results))
-    if args.truncate:
-        sim_results = list(truncate_sims_to_shortest(sim_results))
-    if args.relative:
-        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim_name))
-        if args.roi:
-            sim_results = list(normalize_sims_vs_stone_cost(sim_results))
-        else:
-            sim_results = list(annotate_sims_vs_stone_cost(sim_results))
-    else:
-        sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim_name))
-        sim_results = list(annotate_sims_vs_stone_cost(sim_results))
-        if args.difference:
-            sim_results = list(difference_sims_vs_baseline(sim_results, baseline_sim_name))
+    sim_results = normalize_sims(args, list(evaluate_sims(sims)), baseline_sim_name)
     if args.print:
         print_sim_results(sim_results)
 
     title = ", ".join(
         [
             f"Comparing masteries at level {args.level}",
-            *simulation_args_description(args),
-            *relative_args_description(args, baseline_sim_name),
-            *mastery_args_description(args),
+            *common_args_description(args, baseline_sim_name),
             f"for T{args.tier}W{args.wave}",
         ]
     )
-    ylabel = args.reward
-    if args.elapsed:
-        ylabel += f" per hour"
-    if args.relative:
-        ylabel += f" relative to {baseline_sim_name}"
-    elif args.difference:
-        ylabel += f" difference from {baseline_sim_name}"
-
-    plot = plot_sim_results(title, ylabel, sim_results)
-    if args.relative and args.crop:
-        plot.bottom, plot.top = calculate_margins(sim_results)
-    return plot
+    return plot_sim_results(args, title, sim_results)
 
 
 def subcommand_mastery(args: argparse.Namespace) -> Plot:
     convert_mastery_args(args)
     config = make_sim(args)
-    config.tier = args.tier
     config.max_waves = args.wave
 
-    sims = [mastery_sim(config, args.mastery, level) for level in MASTERY_LEVELS]
+    sims = [
+        mastery_sim(config, args.mastery, level, args.enemy_balance_with_cash)
+        for level in MASTERY_LEVELS
+    ]
     baseline_sim = sims[0]
-    sim_results = list(evaluate_sims(sims))
-    if args.elapsed:
-        sim_results = list(normalize_sims_vs_elapsed(sim_results))
-    if args.truncate:
-        sim_results = list(truncate_sims_to_shortest(sim_results))
-    if args.relative:
-        sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim.name))
-    else:
-        sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim.name))
-        if args.difference:
-            sim_results = list(difference_sims_vs_baseline(sim_results, baseline_sim.name))
+    sim_results = normalize_sims(args, list(evaluate_sims(sims)), baseline_sim.name)
     if args.print:
         print_sim_results(sim_results)
 
@@ -1425,40 +1394,16 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     title = ", ".join(
         [
             f"Comparing {MASTERY_DISPLAY_NAMES[args.mastery]}# levels",
-            *simulation_args_description(args),
-            *relative_args_description(args, relative_to),
-            *mastery_args_description(args),
+            *common_args_description(args, relative_to),
             f"for T{args.tier}W{args.wave}",
         ]
     )
-    ylabel = args.reward
-    if args.elapsed:
-        ylabel += f" per hour"
-    if args.relative:
-        ylabel += f" relative to {baseline_sim.name}"
-    elif args.difference:
-        ylabel += f" difference from {baseline_sim.name}"
-    plot = plot_sim_results(title, ylabel, sim_results)
-    if args.relative and args.crop:
-        plot.bottom, plot.top = calculate_margins(sim_results)
-    return plot
+    return plot_sim_results(args, title, sim_results)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="subcommand")
-
-    # Simulate a sequence of waves with fixed mastery levels
-    waves_subparser = subparsers.add_parser("waves")
-    waves_subparser.add_argument(
-        "waves",
-        type=int,
-        nargs="+",
-        help="Sequence of wave numbers to simulate",
-    )
-    add_tier_args(waves_subparser)
-    add_simulation_args(waves_subparser)
-    add_mastery_args(waves_subparser)
 
     # Simulate a sequence of tier/wave pairs with fixed mastery levels
     tiers_subparser = subparsers.add_parser("tiers")
@@ -1468,14 +1413,11 @@ if __name__ == "__main__":
         nargs="+",
         help="Sequence of tier/wave pairs to simulate",
     )
-    add_simulation_args(tiers_subparser)
-    add_mastery_args(tiers_subparser)
+    add_common_args(tiers_subparser)
 
     # Compare all masteries at a single level
     compare_subparser = subparsers.add_parser("compare")
-    add_wave_args(compare_subparser)
-    add_tier_args(compare_subparser)
-    add_relative_args(compare_subparser)
+    compare_subparser.add_argument("wave", type=int, help="Wave number to simulate")
     compare_subparser.add_argument(
         "--level",
         "-l",
@@ -1483,35 +1425,28 @@ if __name__ == "__main__":
         default="1",
         help="Compare all masteries at this level",
     )
-    compare_subparser.add_argument(
-        "--roi",
-        action="store_true",
-        help="Normalize all results against stone cost",
-    )
-    add_simulation_args(compare_subparser)
-    add_mastery_args(compare_subparser)
+    add_common_args(compare_subparser)
 
     # Compare all levels of a single mastery
     mastery_subparser = subparsers.add_parser("mastery")
-    add_wave_args(mastery_subparser)
-    add_tier_args(mastery_subparser)
+    mastery_subparser.add_argument("wave", type=int, help="Wave number to simulate")
     mastery_subparser.add_argument(
         "mastery",
         choices=MASTERY_DISPLAY_NAMES.keys(),
         help="Compare all mastery levels of this mastery",
     )
-    add_relative_args(mastery_subparser)
-    add_simulation_args(mastery_subparser)
-    add_mastery_args(mastery_subparser)
+    add_common_args(mastery_subparser)
 
     args = parser.parse_args()
 
     if not 0.0 <= args.orb_hits <= 1.0:
         parser.error("--orb-hits must be between 0.0 and 1.0")
+    if args.relative and args.difference:
+        parser.error("--relative and --difference are mutually exclusive")
+    if not args.relative and args.roi:
+        parser.error("--roi can only be used with --relative")
 
-    if args.subcommand == "waves":
-        plot = subcommand_waves(args)
-    elif args.subcommand == "tiers":
+    if args.subcommand == "tiers":
         plot = subcommand_tiers(args)
     elif args.subcommand == "compare":
         plot = subcommand_compare(args)

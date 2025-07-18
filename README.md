@@ -17,52 +17,47 @@ Calculate the effects of card masteries on cumulative run rewards.
    pip install -r requirements.txt
    ```
 
-### Compare different numbers of waves at the same tier
-
-```
-./mastery_calc.py waves \
-    WAVES [ WAVES [ WAVES... ] ] [ --tier=TIER ] \
-    [ SIMULATION_OPTIONS ] \
-    [ MASTERY_OPTIONS ]
-```
-
 ### Compare different tier:wave combinations
 
 ```
-./mastery_calc.py tiers \
-    TIER:WAVES [ TIER:WAVES [ TIER:WAVES... ] ] \
-    [ SIMULATION_OPTIONS ] \
-    [ MASTERY_OPTIONS ]
+./mastery_calc.py tiers TIER:WAVES [ TIER:WAVES... ] [ COMMON_OPTIONS ]
 ```
 
 ### Compare all masteries at the same level
 
 ```
-./mastery_calc.py compare \
-    WAVES [ --tier=TIER ] [ (--level|-l)=MASTERIES_LEVEL ] \
-    [ ( (--difference|-d) | ( (--relative|-r) [ --roi ] ) ) ] \
-    [ SIMULATION_OPTIONS ] \
-    [ MASTERY_OPTIONS ]
+./mastery_calc.py compare WAVES [ (--level|-l)=MASTERIES_LEVEL ] [ COMMON_OPTIONS ]
 ```
 
 ### Compare a single mastery at all its levels
 
 ```
-./mastery_calc.py mastery \
-    WAVES [ --tier=TIER ] MASTERY_NAME \
-    [ ( (--difference|-d) | (--relative|-r) ) ] \
-    [ SIMULATION_OPTIONS ] \
-    [ MASTERY_OPTIONS ]
+./mastery_calc.py mastery WAVES MASTERY_NAME [ COMMON_OPTIONS ]
 ```
 
 ### Common option groups
 
-The following options are accepted for `SIMULATION_OPTIONS`:
+The following options are accepted for `COMMON_OPTIONS`:
 
+Simulation events
 ```
+[ --tier=TIER ] # Which tier to simulate
 [ --orb-hits=ORB_HIT_RATIO ] # Portion of enemies struck by orbs
+```
+Tier must be between 1-18, and orb hits must be between 0-1. Both default to 1
+if not specified.
+
+Reward normalization
+```
 [ --reward=( coins | cells | rerolls | modules ) ]
-[ --elapsed ]  # Normalize rewards vs elapsed time
+[ --elapsed ]         # Normalize rewards vs elapsed time
+[ (--relative|-r) ]   # Divide by baseline values
+[ --roi ]             # Divide by stone cost
+[ (--difference|-d) ] # Subtract baseline values
+```
+
+Output options
+```
 [ --truncate ] # Truncate horizontally to shortest run
 [ --crop ]     # Crop vertically to exclude outliers
 [ --no-print ] # Do not print results
@@ -70,8 +65,7 @@ The following options are accepted for `SIMULATION_OPTIONS`:
 [ (--output|-o)=OUTPUT_PNG_PATH ] # Render plot to file
 ```
 
-The following options are accepted for `MASTERY_OPTIONS`:
-
+Mastery levels
 ```
 [ --cash=CASH_MASTERY_LEVEL ]
 [ --coin=COIN_MASTERY_LEVEL ]
@@ -79,24 +73,19 @@ The following options are accepted for `MASTERY_OPTIONS`:
 [ --enemy-balance=ENEMY_BALANCE_MASTERY_LEVEL ]
 [ --extra-orb=EXTRA_ORB_MASTERY_LEVEL ]
 [ --intro-sprint=INTRO_SPRINT_MASTERY_LEVEL ]
-[ --recovery-package=RECOVERY_PACKAGE_MASTERY_LEVEL \
+[ --recovery-package=RECOVERY_PACKAGE_MASTERY_LEVEL ]
 [ --wake-skip=WAVE_SKIP_MASTERY_LEVEL ]
 [ --wave-accelerator=WAVE_ACCELERATOR_MASTERY_LEVEL ]
 ```
-
-Each mastery option accepts the values `locked`, or `0` through `9`. By default,
+Each mastery level accepts the values `locked`, or `0` through `9`. By default,
 each option is `locked` if not specified.
 
 ## Examples
 
 ```bash
-# Compare cumulative coin earnings from different length runs with a custom
-# orb-hit guess. Render the result to a PNG file.
-./mastery_calc.py waves 2000 4000 8000 --orb-hits=0.8 -o longer-runs.png
-
 # Compare cumulative coin earnings from different length runs on different
-# tiers.
-./mastery_calc.py waves T10:2000 T6:4000 T2:8000
+# tiers with a custom orb-hit guess. Render the result to PNG file.
+./mastery_calc.py waves T10:2000 T6:4000 T2:8000 --orb-hits=0.8 -o plot.png
 
 # Compare cumulative reroll earnings from each mastery at level 2 against a
 # baseline of no masteries over a 10k wave run. Show results relative to the
