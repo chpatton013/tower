@@ -113,6 +113,7 @@ COMMON_MODULE_DROP_CHANCE = 0.03
 COMMON_MODULE_VALUE = 10
 RARE_MODULE_DROP_CHANCE = 0.015
 RARE_MODULE_VALUE = 30
+BLACK_HOLE_COIN_BONUS = 11.0
 
 # Card data
 
@@ -202,29 +203,6 @@ class Simulation:
     recovery_package: int | None = None
     wave_accelerator: int | None = None
     wave_skip: int | None = None
-
-    def max_intro_wave(self) -> int:
-        return (
-            100
-            if self.intro_sprint is None
-            else INTRO_SPRINT_MASTERY_TABLE[self.intro_sprint]
-        )
-
-    def spawn_rate_row(self) -> list[int]:
-        return (
-            SPAWN_RATE_WAVES
-            if self.wave_accelerator is None
-            else WAVE_ACCELERATOR_MASTERY_TABLE[self.wave_accelerator]
-        )
-
-    def spawn_rate_index(self, wave: int):
-        index = max(
-            i for i, min_wave in enumerate(self.spawn_rate_row()) if min_wave <= wave
-        )
-        assert (
-            0 <= index < len(SPAWN_RATE_SEQUENCE)
-        ), f"Invalid spawn rate index: {index}"
-        return index
 
 
 def free_upgrades_default_factory() -> dict[str, float]:
@@ -398,6 +376,13 @@ def add_simulation_args(parser: argparse.ArgumentParser):
         help="Which reward to plot and compare",
     )
     parser.add_argument(
+        "--no-crop",
+        dest="crop",
+        action="store_false",
+        default=True,
+        help="Do not crop results of the plot",
+    )
+    parser.add_argument(
         "--log-scale",
         action="store_true",
         default=False,
@@ -536,12 +521,20 @@ def mastery_args_description(args: argparse.Namespace) -> list[str]:
 
 
 def add_relative_args(parser: argparse.ArgumentParser):
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--relative",
         "-r",
         action="store_true",
         default=False,
         help="Normalize all results against the baseline configuration",
+    )
+    group.add_argument(
+        "--difference",
+        "-d",
+        action="store_true",
+        default=False,
+        help="Subtract the baseline configuration from all results",
     )
 
 
@@ -552,10 +545,38 @@ def add_wave_args(parser: argparse.ArgumentParser):
 def relative_args_description(
     args: argparse.Namespace, baseline_sim_name: str
 ) -> list[str]:
-    return [f"relative to {baseline_sim_name}"] if args.relative else []
+    if args.relative:
+        return [f"relative to {baseline_sim_name}"]
+    elif args.difference:
+        return [f"difference from {baseline_sim_name}"]
+    else:
+        return []
 
 
 # Simulation logic
+
+
+def max_intro_wave(sim: Simulation) -> int:
+    return (
+        100
+        if sim.intro_sprint is None
+        else INTRO_SPRINT_MASTERY_TABLE[sim.intro_sprint]
+    )
+
+
+def spawn_rate_index(sim: Simulation, wave: int):
+    spawn_rate_row = (
+        SPAWN_RATE_WAVES
+        if sim.wave_accelerator is None
+        else WAVE_ACCELERATOR_MASTERY_TABLE[sim.wave_accelerator]
+    )
+    index = max(
+        i for i, min_wave in enumerate(spawn_rate_row) if min_wave <= wave
+    )
+    assert (
+        0 <= index < len(SPAWN_RATE_SEQUENCE)
+    ), f"Invalid spawn rate index: {index}"
+    return index
 
 
 def elite_spawn_count(sim: Simulation, wave: int) -> float:
@@ -576,21 +597,28 @@ def elite_spawn_count(sim: Simulation, wave: int) -> float:
 
 
 def simulate_wave(sim: Simulation, wave: int) -> Events:
-    spawn_rate_index = sim.spawn_rate_index(wave)
-    spawn_rate = SPAWN_RATE_SEQUENCE[spawn_rate_index]
+    spawn_index = spawn_rate_index(sim, wave)
+    spawn_rate = SPAWN_RATE_SEQUENCE[spawn_index]
     common_spawns = WAVE_DURATION * 8 * spawn_rate / 100
     elite_spawns = elite_spawn_count(sim, wave)
 
+    # Boss spawns are binary, once every N waves based on tier.
     boss_period = TIER_BOSS_PERIOD[sim.tier - 1]
     boss_spawn = 1 if (wave % boss_period) == 0 else 0
-    package_spawn = 1 if ((wave - 1) % boss_period) else sim.recovery_package_chance
+    # Assuming "Package After Boss" lab, a package will guaranteed spawn every wave
+    # following a boss spawn (ie, when `wave - 1` was a boss wave). Otherwise, the
+    # chance is based on workshop, labs, and module effects.
+    package_spawn = sim.recovery_package_chance
+    if (wave - 1) % boss_period == 0:
+        package_spawn = 1
 
     double_skip_chance = 0.0
     if sim.wave_skip is not None:
+        # A double skip can only happen if a single skip is triggered.
         double_skip_chance = WAVE_SKIP_CHANCE * WAVE_SKIP_MASTERY_TABLE[sim.wave_skip]
-    # Any given wave w can be skipped if
-    # 1. w-2 triggered a double skip, or
-    # 2. w-2 did not trigger a double skip, but w-1 triggered a single skip
+    # Any given wave `w` can be skipped if:
+    # 1. `w-2` triggered a double skip, or
+    # 2. `w-2` did not trigger a double skip, but `w-1` triggered a single skip
     wave_skip_chance = double_skip_chance + WAVE_SKIP_CHANCE * (1 - double_skip_chance)
 
     return Events(
@@ -601,7 +629,7 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
         enemy_level_skips=sim.enemy_level_skip_chances,
         enemies={
             **{
-                name: common_spawns * row[spawn_rate_index]
+                name: common_spawns * row[spawn_index]
                 for name, row in SPAWN_CHANCE_TABLE.items()
             },
             "boss": boss_spawn,
@@ -612,7 +640,11 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
     )
 
 
-def calculate_coins(sim: Simulation, events: Events) -> float:
+def wave_skip_bonus(events: Events, noskip: float, skip: float) -> float:
+    return (1 - events.wave_skip) * noskip + (events.wave_skip * skip)
+
+
+def calculate_coins(sim: Simulation, events: Events, previous_rewards: Rewards) -> float:
     coin_bonus = TIER_COIN_BONUS[sim.tier - 1]
     if sim.coin is not None:
         coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
@@ -620,6 +652,7 @@ def calculate_coins(sim: Simulation, events: Events) -> float:
         # TODO: Confirm if EO# affects all derivative scatter splits, or only the ones
         # that are directly hit by orbs.
         coin_bonus *= 1 + ((EXTRA_ORB_MASTERY_TABLE[sim.extra_orb] - 1) * sim.orb_hits)
+
     coins_per_enemy = {
         name: drop * coin_bonus for name, drop in COIN_DROP_TABLE.items()
     }
@@ -629,47 +662,65 @@ def calculate_coins(sim: Simulation, events: Events) -> float:
     # give the same amount of coins.
     coins_per_enemy["scatter"] *= sum(1 << i for i in range(0, 5))
     # Elites are not affected by BH coin bonus
-    coins_per_enemy["scatter"] /= 11
-    coins_per_enemy["vampire"] /= 11
-    coins_per_enemy["ray"] /= 11
-    return sum(
+    coins_per_enemy["scatter"] /= BLACK_HOLE_COIN_BONUS
+    coins_per_enemy["vampire"] /= BLACK_HOLE_COIN_BONUS
+    coins_per_enemy["ray"] /= BLACK_HOLE_COIN_BONUS
+
+    coins = sum(
         events.enemies[name] * coins_per_enemy[name] for name in events.enemies.keys()
     )
+    return wave_skip_bonus(events, coins, previous_rewards.coins * WAVE_SKIP_BONUS)
 
 
-def calculate_cells(sim: Simulation, events: Events) -> float:
-    total_elite_count = (
-        events.enemies["scatter"] + events.enemies["vampire"] + events.enemies["ray"]
-    )
+def calculate_cells(sim: Simulation, events: Events, previous_rewards: Rewards) -> float:
+    # Elites drop a random number of cells between the min and max values for the tier.
+    # Normally that's 1-TIER, but higher tiers have a floor above 1.
     cells_per_elite = (
         TIER_CELL_DROP_MIN[sim.tier - 1] + TIER_CELL_DROP_MAX[sim.tier - 1]
     ) / 2
-    return total_elite_count * cells_per_elite
-
-
-def calculate_rerolls(sim: Simulation, events: Events) -> float:
+    # Each elite *spawn* drops cells equally. Scatter splits all only count as a single
+    # spawned elite. So even though we see 31 enemies killed per Scatter spawned, we
+    # only get one "cell drop" event.
     total_elite_count = (
         events.enemies["scatter"] + events.enemies["vampire"] + events.enemies["ray"]
     )
-    rerolls_per_boss = TIER_REROLL_DROP[sim.tier - 1]
-    # Elites drop half as many reroll shards as bosses with cash mastery.
-    rerolls_per_elite = rerolls_per_boss / 2
 
+    elite_cells = total_elite_count * cells_per_elite
+    return wave_skip_bonus(
+        events, elite_cells, previous_rewards.elite_cells * WAVE_SKIP_BONUS
+    )
+
+
+def calculate_rerolls(sim: Simulation, events: Events) -> float:
+    rerolls_per_boss = TIER_REROLL_DROP[sim.tier - 1]
     reroll_shards = events.enemies["boss"] * REROLL_SHARD_DROP_CHANCE * rerolls_per_boss
     if sim.cash is not None:
-        reroll_shards += (
+        # Each type of elite drops reroll shards with cash mastery.
+        total_elite_count = (
+            events.enemies["scatter"]
+            + events.enemies["vampire"]
+            + events.enemies["ray"]
+        )
+        # Elites drop half as many reroll shards as bosses.
+        rerolls_per_elite = rerolls_per_boss / 2
+        elite_rerolls = (
             total_elite_count * CASH_MASTERY_TABLE[sim.cash] * rerolls_per_elite
         )
+        # Elites do not drop reroll shards on skipped waves.
+        reroll_shards += wave_skip_bonus(events, elite_rerolls, 0)
     return reroll_shards
 
 
 def calculate_modules(sim: Simulation, events: Events) -> float:
     common_modules = events.enemies["boss"] * COMMON_MODULE_DROP_CHANCE
     if sim.recovery_package is not None:
-        common_modules += (
+        # Recovery packages have a chance to provide modules.
+        package_modules = (
             events.recovery_packages
             * RECOVERY_PACKAGE_CHANCE_MASTERY_TABLE[sim.recovery_package]
         )
+        # Recovery packages do not provide modules on skipped waves.
+        common_modules += wave_skip_bonus(events, package_modules, 0)
     rare_modules = events.enemies["boss"] * RARE_MODULE_DROP_CHANCE
     return common_modules * COMMON_MODULE_VALUE + rare_modules * RARE_MODULE_VALUE
 
@@ -677,25 +728,11 @@ def calculate_modules(sim: Simulation, events: Events) -> float:
 def calculate_rewards(
     sim: Simulation, events: Events, previous_rewards: Rewards
 ) -> Rewards:
-    coins = calculate_coins(sim, events)
-    elite_cells = calculate_cells(sim, events)
-    reroll_shards = calculate_rerolls(sim, events)
-    module_shards = calculate_modules(sim, events)
-
-    def wave_skip_bonus(noskip: float, skip: float) -> float:
-        return (1 - events.wave_skip) * noskip + (
-            events.wave_skip * skip * WAVE_SKIP_BONUS
-        )
-
-    # Apply wave skip bonus to coins and cells.
-    coins = wave_skip_bonus(coins, previous_rewards.coins)
-    elite_cells = wave_skip_bonus(elite_cells, previous_rewards.elite_cells)
-
     return Rewards(
-        coins=coins,
-        elite_cells=elite_cells,
-        reroll_shards=reroll_shards,
-        module_shards=module_shards,
+        coins=calculate_coins(sim, events, previous_rewards),
+        elite_cells=calculate_cells(sim, events, previous_rewards),
+        reroll_shards=calculate_rerolls(sim, events),
+        module_shards=calculate_modules(sim, events),
     )
 
 
@@ -714,8 +751,8 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
     # Intro sprint
 
-    max_intro_wave = sim.max_intro_wave()
-    for wave in range(1, max_intro_wave):
+    intro_wave_count = max_intro_wave(sim)
+    for wave in range(1, intro_wave_count):
         events = simulate_wave(sim, wave)
         # The only waves that don't skip during intro sprint are the 1st and every 10th.
         if wave == 1 or wave % 10 == 0:
@@ -745,7 +782,7 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
     # First regular wave after intro sprint (not skippable)
 
-    events = simulate_wave(sim, max_intro_wave)
+    events = simulate_wave(sim, intro_wave_count)
     # The first wave after intro sprint is guaranteed not to skip.
     events.wave_skip = 0.0
     rewards = calculate_rewards(sim, events, previous_rewards)
@@ -755,7 +792,7 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     cumulative_rewards += rewards
     elapsed_time += WAVE_DURATION + WAVE_COOLDOWN
     yield SimulationWaveResult(
-        wave=max_intro_wave,
+        wave=intro_wave_count,
         elapsed_time=elapsed_time,
         cumulative_events=copy.deepcopy(cumulative_events),
         cumulative_rewards=copy.deepcopy(cumulative_rewards),
@@ -763,7 +800,7 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
     # Regular waves
 
-    for wave in range(max_intro_wave + 1, sim.max_waves + 1):
+    for wave in range(intro_wave_count + 1, sim.max_waves + 1):
         events = simulate_wave(sim, wave)
         rewards = calculate_rewards(sim, events, previous_rewards)
         previous_rewards = rewards
@@ -904,6 +941,30 @@ def annotate_sims_vs_stone_cost(
         value = run_result.relative / MASTERY_STONE_COSTS[sim.mastery]
         yield sim, dataclasses.replace(run_result, roi=value)
 
+
+def difference_sims_vs_baseline(
+    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    baseline_sim_name: str,
+) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    baseline_results = next(
+        run_result for sim, run_result in sim_results if sim.name == baseline_sim_name
+    )
+
+    for sim, run_result in sim_results:
+        difference_results = []
+        difference = 0.0
+        for wave_result in run_result.wave_results:
+            baseline_rewards = rewards_at_time(
+                baseline_results, wave_result.elapsed_time
+            )
+            differenced_rewards = (wave_result.cumulative_rewards - baseline_rewards)
+            difference = reward_value(sim, differenced_rewards)
+            difference_results.append(
+                dataclasses.replace(wave_result, cumulative_rewards=differenced_rewards)
+            )
+        yield sim, dataclasses.replace(
+            run_result, wave_results=difference_results
+        )
 
 def normalize_sims_vs_baseline(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
@@ -1101,7 +1162,7 @@ def interesting_waves(sim: Simulation) -> set[int]:
         # Intro sprint mastery
         *{wave - 1 for wave in range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10)},
         *{wave for wave in range(10, max(INTRO_SPRINT_MASTERY_TABLE) + 1, 10)},
-        *{max_intro_wave + 1 for max_intro_wave in [100, *INTRO_SPRINT_MASTERY_TABLE]},
+        *{wave + 1 for wave in [100, *INTRO_SPRINT_MASTERY_TABLE]},
         # Wave accelerator mastery
         *{wave - 1 for row in WAVE_ACCELERATOR_MASTERY_TABLE for wave in row},
         *{wave for row in WAVE_ACCELERATOR_MASTERY_TABLE for wave in row},
@@ -1282,6 +1343,8 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
     else:
         sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim_name))
         sim_results = list(annotate_sims_vs_stone_cost(sim_results))
+        if args.difference:
+            sim_results = list(difference_sims_vs_baseline(sim_results, baseline_sim_name))
     if args.print:
         print_sim_results(sim_results)
 
@@ -1297,10 +1360,12 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
     ylabel = args.reward
     if args.relative:
         ylabel += f" relative to {baseline_sim_name}"
+    elif args.difference:
+        ylabel += f" difference from {baseline_sim_name}"
 
     plot = plot_sim_results(title, ylabel, sim_results)
     plot.log_scale = args.log_scale
-    if args.relative:
+    if args.relative and args.crop:
         plot.bottom, plot.top = calculate_margins(sim_results)
     return plot
 
@@ -1319,6 +1384,8 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
         sim_results = list(normalize_sims_vs_baseline(sim_results, baseline_sim.name))
     else:
         sim_results = list(annotate_sims_vs_baseline(sim_results, baseline_sim.name))
+        if args.difference:
+            sim_results = list(difference_sims_vs_baseline(sim_results, baseline_sim.name))
     if args.print:
         print_sim_results(sim_results)
 
@@ -1337,9 +1404,11 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     ylabel = args.reward
     if args.relative:
         ylabel += f" relative to {baseline_sim.name}"
+    elif args.difference:
+        ylabel += f" difference from {baseline_sim.name}"
     plot = plot_sim_results(title, ylabel, sim_results)
     plot.log_scale = args.log_scale
-    if args.relative:
+    if args.relative and args.crop:
         plot.bottom, plot.top = calculate_margins(sim_results)
     return plot
 

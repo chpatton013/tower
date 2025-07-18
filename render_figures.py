@@ -49,6 +49,7 @@ def generate_compare_command(
     args: argparse.Namespace,
     level: str,
     reward: str,
+    diff: bool,
     rel: bool,
     roi: bool,
     extra_name: str = "",
@@ -73,6 +74,9 @@ def generate_compare_command(
         "--no-print",
     ]
 
+    if diff:
+        basename.append("difference")
+        cmd.append("--difference")
     if rel:
         basename.append("relative")
         cmd.append("--relative")
@@ -98,6 +102,7 @@ def generate_mastery_command(
     args: argparse.Namespace,
     mastery: str,
     reward: str,
+    diff: bool,
     rel: bool,
     extra_name: str = "",
     extra_args: list[str] = [],
@@ -121,6 +126,9 @@ def generate_mastery_command(
         "--no-print",
     ]
 
+    if diff:
+        basename.append("difference")
+        cmd.append("--difference")
     if rel:
         basename.append("relative")
         cmd.append("--relative")
@@ -143,7 +151,8 @@ def generate_commands(
     args: argparse.Namespace, extra_args: list[str] = []
 ) -> Iterator[list[str]]:
     tiers_sims = [(11, 10000), (12, 6000), (13, 5000), (14, 3500)]
-    rel_roi = [(False, False), (True, False), (True, True)]
+    diff_rel_roi = [(True, False, False), (False, False, False), (False, True, False), (False, True, True)]
+    diff_rel = [(True, False), (False, False), (False, True)]
     coin_masteries = [
         "coin",
         "critical-coin",
@@ -156,19 +165,17 @@ def generate_commands(
     cell_masteries = [
         "enemy-balance",
         "intro-sprint",
-        "wave-accelerator",
         "wave-skip",
     ]
     reroll_masteries = [
+        "cash",
         "enemy-balance",
         "intro-sprint",
-        "wave-accelerator",
         "wave-skip",
     ]
     module_masteries = [
         "intro-sprint",
         "recovery-package",
-        "wave-accelerator",
         "wave-skip",
     ]
 
@@ -185,38 +192,39 @@ def generate_commands(
         for reward in ["coins", "cells"]
     )
     commands.extend(
-        generate_compare_command(args, level, reward, rel, roi, extra_args=extra_args)
+        generate_compare_command(args, level, reward, diff, rel, roi, extra_args=extra_args)
         for level in args.levels
-        for rel, roi in rel_roi
+        for diff, rel, roi in diff_rel_roi
         for reward in ["coins", "cells", "rerolls", "modules"]
     )
     commands.extend(
-        generate_mastery_command(args, mastery, "coins", rel, extra_args=extra_args)
+        generate_mastery_command(args, mastery, "coins", diff, rel, extra_args=extra_args)
         for mastery in coin_masteries
-        for rel in [False, True]
+        for diff, rel in diff_rel
     )
     commands.extend(
-        generate_mastery_command(args, mastery, "cells", rel, extra_args=extra_args)
+        generate_mastery_command(args, mastery, "cells", diff, rel, extra_args=extra_args)
         for mastery in cell_masteries
-        for rel in [False, True]
+        for diff, rel in diff_rel
     )
     commands.extend(
         generate_mastery_command(
             args,
             mastery,
             "rerolls",
+            diff,
             rel,
             extra_name=f"Cash{cash}",
             extra_args=[f"--cash={cash}", *extra_args],
         )
         for mastery in reroll_masteries
-        for rel in [False, True]
+        for diff, rel in diff_rel
         for cash in args.levels
     )
     commands.extend(
-        generate_mastery_command(args, mastery, "modules", rel, extra_args=extra_args)
+        generate_mastery_command(args, mastery, "modules", diff, rel, extra_args=extra_args)
         for mastery in module_masteries
-        for rel in [False, True]
+        for diff, rel in diff_rel
     )
 
     yield from [cli for cli in commands if cli is not None]
