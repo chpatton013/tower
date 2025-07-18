@@ -17,45 +17,58 @@ Calculate the effects of card masteries on cumulative run rewards.
    pip install -r requirements.txt
    ```
 
-### Compare different numbers of waves
+### Compare different numbers of waves at the same tier
 
 ```
-./mastery_calc.py waves WAVES [ WAVES [ WAVES... ] ] \
-    [ --tier=TIER ] [ --reward=( coins | cells | rerolls | modules ) ] \
-    [ --orb-hits=ORB_HIT_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
+./mastery_calc.py waves \
+    WAVES [ WAVES [ WAVES... ] ] [ --tier=TIER ] \
+    [ SIMULATION_OPTIONS ] \
     [ MASTERY_OPTIONS ]
 ```
 
-### Compare different numbers of tier:wave pairs
+### Compare different tier:wave combinations
 
 ```
-./mastery_calc.py tiers TIER:WAVES [ TIER:WAVES [ TIER:WAVES... ] ] \
-    [ --reward=( coins | cells | rerolls | modules ) ] \
-    [ --orb-hits=ORB_HIT_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
+./mastery_calc.py tiers \
+    TIER:WAVES [ TIER:WAVES [ TIER:WAVES... ] ] \
+    [ SIMULATION_OPTIONS ] \
     [ MASTERY_OPTIONS ]
 ```
 
 ### Compare all masteries at the same level
 
 ```
-./mastery_calc.py compare WAVES \
-    [ --tier=TIER ] [ --reward=( coins | cells | rerolls | modules ) ] \
-    [ (--relative|-r) [ --roi ] ] [ (--level|-l)=MASTERIES_LEVEL ] \
-    [ --orb-hits=ORB_HIT_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
+./mastery_calc.py compare \
+    WAVES [ --tier=TIER ] [ (--level|-l)=MASTERIES_LEVEL ] \
+    [ ( (--difference|-d) | ( (--relative|-r) [ --roi ] ) ) ] \
+    [ SIMULATION_OPTIONS ] \
     [ MASTERY_OPTIONS ]
 ```
 
 ### Compare a single mastery at all its levels
 
 ```
-./mastery_calc.py mastery WAVES \
-    [ --tier=TIER ] [ --reward=( coins | cells | rerolls | modules ) ] \
-    [ (--relative|-r) ] MASTERY_NAME \
-    [ --orb-hits=ORB_HIT_RATIO ] [ (--output|-o)=OUTPUT_PNG_PATH ] \
+./mastery_calc.py mastery \
+    WAVES [ --tier=TIER ] MASTERY_NAME \
+    [ ( (--difference|-d) | (--relative|-r) ) ] \
+    [ SIMULATION_OPTIONS ] \
     [ MASTERY_OPTIONS ]
 ```
 
-### Mastery options
+### Common option groups
+
+The following options are accepted for `SIMULATION_OPTIONS`:
+
+```
+[ --orb-hits=ORB_HIT_RATIO ] # Portion of enemies struck by orbs
+[ --reward=( coins | cells | rerolls | modules ) ]
+[ --elapsed ]  # Normalize rewards vs elapsed time
+[ --truncate ] # Truncate horizontally to shortest run
+[ --crop ]     # Crop vertically to exclude outliers
+[ --no-print ] # Do not print results
+[ --no-plot ]  # Do not plot results
+[ (--output|-o)=OUTPUT_PNG_PATH ] # Render plot to file
+```
 
 The following options are accepted for `MASTERY_OPTIONS`:
 
