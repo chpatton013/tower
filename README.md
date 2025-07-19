@@ -111,10 +111,36 @@ each option is `locked` if not specified.
 > tl;dr: RPC#, Cash#, EB#, and EO#; followed by WS# and WA#
 
 To determine which mastery has the best impact on your economy per stone spent,
-you have to compare each reward you care about farming under different length
-and difficulty configurations. We'll summarize the long and short farm run
-configurations, and then look at whether short farm runs on higher tiers are
-feasible with WA#.
+you have to compare each reward you care about farming under the different
+configurations you can farm. We'll summarize results found for a T11 W10000 run
+and a T14 W3500 run, then compare T11-T14 runs to each other with varying
+mastery levels.
+
+### T11
+
+Simulated configuration
+- T11 W10k
+- Relative comparison of all masteries
+- Normalized against elapsed time
+- Assume orbs hit all enemies
+
+Results when normalized by mastery stone cost
+- Coins:
+  - Level 0: EO# >> WS# >= WA# >= Coin# >> CritCoin# >= IS#
+  - Level 2: EO# >> Coin# >= WA# >= WS# > IS# >= CritCoin#
+  - Level 9: EO# >> Coin# > WS# >= WA# > IS# >= CritCoin#
+- Elite cells:
+  - Level 0: EB# > WS# > IS#
+  - Level 2: EB# > WS# >= IS#
+  - Level 9: EB# > IS# >= WS#
+- Reroll shards:
+  - If you assume you already have Cash#0:
+    - Level 0: WS# > EB# > IS#
+    - Level 2: Cash# > WS# > EB# > IS#
+  - If you don't assume Cash#0:
+    - Level 2: Cash# > WS# > Baseline >= IS#
+- Module shards:
+  - Level 0: RPC# >> WS# > Baseline >= IS#
 
 Figures
 - [relative coins per hour from all masteries at level 0](./figures/compare-coins-T11W10000-L0-rel-dt.png)
@@ -130,66 +156,43 @@ Figures
 - [relative rerolls per hour from all masteries at level 0](./figures/compare-rerolls-T11W10000-L0-rel-dt.png)
 - [relative rerolls per hour from all masteries at level 0 with Cash# at level 0](./figures/compare-rerolls-T11W10000-L0-rel-Cash0-dt.png)
 - [relative rerolls per hour from all masteries at level 2 with Cash# at level 0](./figures/compare-rerolls-T11W10000-L2-rel-Cash0-dt.png)
-- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA0-dt.png)
-- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA2-dt.png)
-- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA9-dt.png)
-- [cells between T11-T14](./figures/tiers-cells-T11W10000-T12W6000-T13W5000-T14W3500-dt.png)
-- [rerolls between T11-T14 with Cash# at level 0](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash0-EB0-dt.png)
-- [rerolls between T11-T14 with Cash# at level 9](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash9-EB9-dt.png)
 
-### Long farm run
+### T14
 
-Configuration
-- T11 W10k
+Simulated configuration
+- T14 W3.5k
 - Relative comparison of all masteries
 - Normalized against elapsed time
-- Compared per stone cost of mastery
 - Assume orbs hit all enemies
 
-Results
+Results when normalized by mastery stone cost
 - Coins:
-  - Level 0: EO# >> WS# >= WA# >= Coin# >> CritCoin# >= IS#
-  - Level 2: EO# >> Coin# >= WA# >= WS# > IS# >= CritCoin#
-  - Level 9: EO# >> Coin# > WS# >= WA# > IS# >= CritCoin#
-
+  - Level 0: EO# >> WA# > WS# > Coin# >> IS# >= CritCoin#
+  - Level 2: EO# >> WA# >> Coin# >= IS# > WS# > CritCoin#
+  - Level 9: EO# >> WA# > Coin# > IS# >= WS# > CritCoin#
 - Elite cells:
-  - Level 0: EB# > WS# > IS#
-  - Level 2: EB# > WS# >= IS#
-  - Level 9: EB# > IS# >= WS#
+  - Level 0: EB# > WS# = IS#
+  - Level 2: IS# > EB# > WS#
+  - Level 9: IS# >> EB# > WS#
+- Reroll shards: same as T11
+- Module shards: same as T11
 
-- Reroll shards:
-  - If you assume you already have Cash#0:
-    - Level 0: WS# > EB# > IS#
-    - Level 2: Cash# > WS# > EB# > IS#
-  - If you don't assume Cash#0:
-    - Level 2: Cash# > WS# > Baseline >= IS#
+Figures
+- [relative coins per hour from all masteries at level 0](./figures/compare-coins-T14W3500-L0-rel-dt.png)
+- [relative coins per hour per stone from all masteries at level 0](./figures/compare-coins-T14W3500-L0-rel-roi-dt.png)
+- [relative coins per hour from all masteries at level 2](./figures/compare-coins-T14W3500-L2-rel-dt.png)
+- [relative coins per hour per stone from all masteries at level 2](./figures/compare-coins-T14W3500-L2-rel-roi-dt.png)
+- [relative coins per hour from all masteries at level 9](./figures/compare-coins-T14W3500-L9-rel-dt.png)
+- [relative coins per hour per stone from all masteries at level 9](./figures/compare-coins-T14W3500-L9-rel-roi-dt.png)
+- [relative cells per hour from all masteries at level 0](./figures/compare-cells-T14W3500-L0-rel-dt.png)
+- [relative cells per hour from all masteries at level 2](./figures/compare-cells-T14W3500-L2-rel-dt.png)
+- [relative cells per hour from all masteries at level 9](./figures/compare-cells-T14W3500-L9-rel-dt.png)
+- [relative modules per hour from all masteries at level 0](./figures/compare-modules-T14W3500-L0-rel-dt.png)
+- [relative rerolls per hour from all masteries at level 0](./figures/compare-rerolls-T14W3500-L0-rel-dt.png)
+- [relative rerolls per hour from all masteries at level 0 with Cash# at level 0](./figures/compare-rerolls-T14W3500-L0-rel-Cash0-dt.png)
+- [relative rerolls per hour from all masteries at level 2 with Cash# at level 0](./figures/compare-rerolls-T14W3500-L2-rel-Cash0-dt.png)
 
-- Module shards:
-  - Level 0: RPC# >> WS# > Baseline >= IS#
-
-### Short farm run
-
-Configuration
-- Same as long farm run, except T11 W5k
-
-Results
-- Coins:
-  - Level 0: EO# > WA# > WS# > Coin# >> IS# >= CritCoin#
-  - Level 2: EO# > WA# >> Coin# > WS# > IS# > CritCoin#
-  - Level 9: EO# >> WA# > Coin# > WS# >= IS# > CritCoin#
-
-- Elite cells:
-  - Level 0: Same as long run
-  - Level 2: EB# >= IS# > WS#
-  - Level 9: EB# = IS# >= WS#
-
-- Reroll shards:
-  - Same as long run
-
-- Module shards:
-  - Same as long run
-
-### Higher tiers
+### Comparing across tiers
 
 Configuration
 - Relative comparison of all difficulties
@@ -212,10 +215,10 @@ Results:
     - T12: +9% from T11
     - T13: +26% from T11
     - T14: +33% from T11
-- Cells: About a 10-20% reduction on higher tiers
-  - T12: -20% from T11
+- Cells:
+  - T12: -19% from T11
   - T13: -20% from T11
-  - T14: -10% from T11
+  - T14: -9% from T11
 - Rerolls:
   - Cash# and EB# at level 0:
     - T12: +8% from T11
@@ -227,16 +230,50 @@ Results:
     - T14: -4% from T11
 - Modules: No variance
 
+Figures
+- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA0-dt.png)
+- [coins between T11-T14 with WA# at level 2](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA2-dt.png)
+- [coins between T11-T14 with WA# at level 9](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA9-dt.png)
+- [cells between T11-T14](./figures/tiers-cells-T11W10000-T12W6000-T13W5000-T14W3500-dt.png)
+- [rerolls between T11-T14 with Cash# at level 0](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash0-EB0-dt.png)
+- [rerolls between T11-T14 with Cash# at level 9](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash9-EB9-dt.png)
+
 ### Analysis
 
-Coin gain from WA# in higher tiers doesn't exceed the benefits of Coin# unless
-farming at T13. For example, comparing WA#0 to Coin#0 at T13: +11% vs +3%.
-However, cell income is dropped by 20% for that configuration, so this is only
-a viable option for people who can afford to deprioritize cell income.
+Coins
+- EO# provides the best ROI in both T11 and T14.
+  - The performance of EO# is based on the assumption that orbs hit 100% of all
+    enemies. You're probably getting 80% orb kills, and that sets our worst-case
+    minimum value for orb hits. The results show that EO# has twice the ROI as
+    the runner-up, so anything more than 50% orb hits will leave us with EO# as
+    the best ROI.
+- Coin# is the next strongest choice in T11
+- WA# is the next strongest choice in T14
+- T14 makes 15% more coins than T11 even without any new masteries.
+
+Cells
+- EB# is the strongest choice in T11
+- IS# is the strongest choice in T14
+- T14 makes 9% fewer cells than T11 without any new masteries.
+  - However, T11 EB#2 makes only 5% more cells than T14 IS#2
+
+Rerolls
+- Cash# significantly outperforms every other mastery.
+- T14 makes anywhere between "significantly more" and "barely fewer" rerolls
+  than T11 depending on levels of Cash# and EB#. This is really just T11
+  catching up to T14, though.
+
+Modules
+- RPC# is so far and away better than everything else that it's not worth
+  comparing it to anything.
+- There is no variance in module income across tiers.
 
 If you could only pick four, RPC#, Cash#, EB#, and EO# are each best in their
-respective classes. WS# and WA# share the honorable mention slot for their
-versatility.
+respective classes for T11. IS# replaces EB# for T14. WS# and WA# share the
+honorable mention slot for their versatility.
+
+T14 should greatly outperform T11 for coins and rerolls, and moderately
+underperform for cells. The cell gap can be closed with IS#.
 
 ## Estimation methodology
 
