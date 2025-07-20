@@ -379,8 +379,8 @@ differences, and derive the expected mastery models.
     - an interpolation by that scale factor between the current wave's rewards
       and a scaled value of the previous wave's rewards; if we assume those are
       approximately equal:
-      - `f(w) = (1 - WS_Chance) * (e(w) * r(w)) + WS_Chance * (e(w) * r(w)) * WS_Bonus
-      - `f(w) = e(w) * r(w) * (1 + WS_Chance * (WS_Bonus - 1))
+      - `f(w) = (1 - WS_Chance) * (e(w) * r(w)) + WS_Chance * (e(w) * r(w)) * WS_Bonus`
+      - `f(w) = e(w) * r(w) * (1 + WS_Chance * (WS_Bonus - 1))`
 
 ### Coins
 
@@ -483,7 +483,7 @@ This results in a constant increase in coin income:
 
 WS# increases the effective wave skip chance:
 - `WS_Chance' = (WS_Chance * WS#) + WS_Chance * (1 - WS_Chance * WS#)`
-- `f'(w) = e(w) * r(w) * (1 + WS_Chance' * (WS_Bonus - 1))
+- `f'(w) = e(w) * r(w) * (1 + WS_Chance' * (WS_Bonus - 1))`
 - `w'(t) = w(t * WS#)`
 
 This results in a linear increase in coin income:
@@ -534,7 +534,7 @@ This results in a constant increase in cell income:
 
 WS# increases the effective wave skip chance:
 - `WS_Chance' = (WS_Chance * WS#) + WS_Chance * (1 - WS_Chance * WS#)`
-- `f'(w) = e(w) * r(w) * (1 + WS_Chance' * (WS_Bonus - 1))
+- `f'(w) = e(w) * r(w) * (1 + WS_Chance' * (WS_Bonus - 1))`
 - `w'(t) = w(t * WS#)`
 
 This results in a linear increase in cell income:
@@ -604,7 +604,7 @@ This results in a constant increase in reroll income:
 
 WS# increases the effective wave skip chance:
 - `WS_Chance' = (WS_Chance * WS#) + WS_Chance * (1 - WS_Chance * WS#)`
-- `f'(w) = e(w) * r(w) * (1 + WS_Chance' * (WS_Bonus - 1))
+- `f'(w) = e(w) * r(w) * (1 + WS_Chance' * (WS_Bonus - 1))`
 - `w'(t) = w(t * WS#)`
 
 This results in a linear increase in reroll shard income:
