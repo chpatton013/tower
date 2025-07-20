@@ -1230,7 +1230,7 @@ def plot_sim_results(
     if args.relative:
         ylabel += f" relative"
     if args.roi:
-        ylabel += f" relative"
+        ylabel += f" per stone"
 
     plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel=ylabel)
     for sim, run_result in sim_results:
