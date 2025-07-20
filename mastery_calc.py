@@ -33,10 +33,10 @@ TIER_REROLL_DROP = [1, 2, 3, 4, 6, 8, 12, 18, 25, 32, 40, 45, 50, 55, 60, 65, 70
 assert len(TIERS) == len(TIER_REROLL_DROP)
 TIER_BOSS_PERIOD = [*([10] * 13), 9, 8, 7, 6, 5]
 assert len(TIERS) == len(TIER_BOSS_PERIOD)
-
 SPAWN_RATE_SEQUENCE = [10, 11, 13, 15, 17, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 37, 39, 40, 42, 44, 46, 48, 49, 50, 52, 54, 56]
 SPAWN_RATE_WAVES = [1, 3, 6, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500]
 assert len(SPAWN_RATE_SEQUENCE) == len(SPAWN_RATE_WAVES)
+SPAWN_RATE_FACTOR = 8 * 1.9 / 100 # 8 times per second, +90% from EB, convert to percent
 
 SPAWN_CHANCE_TABLE = {
     "fast": [0.05, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.10, 0.11, 0.11, 0.12, 0.12, 0.13, 0.13, 0.13, 0.14, 0.15, 0.17, 0.18, 0.19, 0.20, 0.21, 0.21, 0.22, 0.23, 0.24, 0.24],
@@ -607,7 +607,7 @@ def elite_spawn_count(sim: Simulation, wave: int) -> float:
 def simulate_wave(sim: Simulation, wave: int) -> Events:
     spawn_index = spawn_rate_index(sim, wave)
     spawn_rate = SPAWN_RATE_SEQUENCE[spawn_index]
-    common_spawns = WAVE_DURATION * 8 * spawn_rate / 100
+    common_spawns = WAVE_DURATION * spawn_rate * SPAWN_RATE_FACTOR
     elite_spawns = elite_spawn_count(sim, wave)
 
     # Boss spawns are binary, once every N waves based on tier.
