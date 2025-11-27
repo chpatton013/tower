@@ -278,6 +278,7 @@ class Simulation:
     reward: str = "coins"
     sum_total_stone_cost: bool = False
     bhd_bonus: float = 0
+    golden_combo: float = 0
 
     # Workshop stats
     free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
@@ -401,6 +402,16 @@ class Events:
     enemies: dict[str, float] = dataclasses.field(
         default_factory=enemies_default_factory
     )
+
+    def elite_enemy_count(self) -> float:
+        return self.enemies["scatter"] + self.enemies["vampire"] + self.enemies["ray"]
+
+    def scatter_children_count(self) -> float:
+        # Each scatter splits in half 4 times.
+        return self.enemies["scatter"] * sum(1 << i for i in range(1, 5))
+
+    def total_enemy_count(self) -> float:
+        return sum(self.enemies.values()) + self.scatter_children_count()
 
     def __iadd__(self, other: Self) -> Self:
         self.wave_skip += other.wave_skip
@@ -541,6 +552,12 @@ def add_common_args(parser: argparse.ArgumentParser):
         type=int,
         default=0,
         help="BHD free-upgrade coin multiplier (%%)",
+    )
+    parser.add_argument(
+        "--golden-combo",
+        type=float,
+        default=0,
+        help="Golden Combo multiplier (%%)",
     )
 
     # Reward normalization
@@ -707,6 +724,8 @@ def common_args_description(args: argparse.Namespace, baseline_name: str) -> lis
         desc.append(f"orbs {args.orb_hits:.2%}")
     if args.bhd > 0:
         desc.append(f"bhd {args.bhd}%")
+    if args.golden_combo > 0:
+        desc.append(f"GT+ {args.golden_combo}%")
 
     # Reward normalization
     desc.append(args.reward)
@@ -1052,7 +1071,7 @@ def wave_skip_bonus_geom(events: Events, value: float) -> float:
 
 
 def calculate_coins(
-    sim: Simulation, perks: Perks, events: Events, previous_rewards: Rewards
+    sim: Simulation, perks: Perks, events: Events, previous_events: Events, previous_rewards: Rewards
 ) -> float:
     coin_bonus = TIER_COIN_BONUS[sim.tier - 1] * perks.coin_bonus(sim)
     if sim.coin is not None:
@@ -1060,6 +1079,11 @@ def calculate_coins(
     if sim.bhd_bonus > 0:
         bhd_bonus = 1 + sim.bhd_bonus * sum(events.free_upgrades.values())
         coin_bonus *= wave_skip_bonus_geom(events, bhd_bonus)
+    if sim.golden_combo > 0:
+        # Calculate the number of enemies that died over the past two waves for the
+        # golden combo exponent. Average the coin reward across the two waves.
+        golden_enemies = events.total_enemy_count() + previous_events.total_enemy_count()
+        coin_bonus *= ((1 + sim.golden_combo) ** golden_enemies) / 2
 
     orb_bonus = 1.0
     if sim.extra_orb is not None:
@@ -1073,14 +1097,12 @@ def calculate_coins(
 
     coins = 0.0
     for name, count in events.enemies.items():
-        enemy_coins = count * coins_per_enemy[name] * orb_bonus
-        # Each scatter splits in half 4 times. The original scatter and each of its
-        # splits give the same amount of coins, but only scatter splits struck by orbs
-        # give the EO# bonus. We'll assume that most scatters make it inside the orb
-        # line before splitting, so only count the orb bonus for the original scatter.
-        if name == "scatter":
-            enemy_coins += sum(1 << i for i in range(1, 5)) * coins_per_enemy["scatter"]
-        coins += enemy_coins
+        coins += count * coins_per_enemy[name] * orb_bonus
+    # The original scatter and each of its splits give the same amount of coins, but
+    # only scatter splits struck by orbs give the EO# bonus. We'll assume that most
+    # scatters make it inside the orb line before splitting, so only count the orb
+    # bonus for the original scatter.
+    coins += events.scatter_children_count() * coins_per_enemy["scatter"]
     return wave_skip_bonus_lerp(events, coins, previous_rewards.coins * WAVE_SKIP_BONUS)
 
 
@@ -1110,11 +1132,7 @@ def calculate_rerolls(sim: Simulation, events: Events) -> float:
     reroll_shards = events.enemies["boss"] * REROLL_SHARD_DROP_CHANCE * rerolls_per_boss
     if sim.cash is not None:
         # Each type of elite drops reroll shards with cash mastery.
-        total_elite_count = (
-            events.enemies["scatter"]
-            + events.enemies["vampire"]
-            + events.enemies["ray"]
-        )
+        total_elite_count = events.elite_enemy_count()
         # Elites drop half as many reroll shards as bosses.
         rerolls_per_elite = rerolls_per_boss / 2
         elite_rerolls = (
@@ -1122,6 +1140,7 @@ def calculate_rerolls(sim: Simulation, events: Events) -> float:
         )
         # Elites do not drop reroll shards on skipped waves.
         reroll_shards += wave_skip_bonus_lerp(events, elite_rerolls, 0)
+
     return reroll_shards
 
 
@@ -1140,10 +1159,10 @@ def calculate_modules(sim: Simulation, events: Events) -> float:
 
 
 def calculate_rewards(
-    sim: Simulation, perks: Perks, events: Events, previous_rewards: Rewards
+    sim: Simulation, perks: Perks, events: Events, previous_events: Events, previous_rewards: Rewards
 ) -> Rewards:
     return Rewards(
-        coins=calculate_coins(sim, perks, events, previous_rewards),
+        coins=calculate_coins(sim, perks, events, previous_events, previous_rewards),
         elite_cells=calculate_cells(sim, events, previous_rewards),
         reroll_shards=calculate_rerolls(sim, events),
         module_shards=calculate_modules(sim, events),
@@ -1154,6 +1173,7 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     elapsed_time = 0
     cumulative_events = Events()
     cumulative_rewards = Rewards()
+    previous_events = Events()
     previous_rewards = Rewards()
 
     yield SimulationWaveResult(
@@ -1181,15 +1201,16 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
             events.wave_skip = 1.0
             # Skipped intro waves are guaranteed to not have a boss.
             events.enemies["boss"] = 0
-        rewards = calculate_rewards(sim, perks, events, previous_rewards)
+        rewards = calculate_rewards(sim, perks, events, previous_events, previous_rewards)
         # No coins, rerolls, or modules are earned during intro sprint, and cells are
         # reduced to only 20%.
         rewards = Rewards(elite_cells=rewards.elite_cells * 0.2)
-        previous_rewards = rewards
         wave_time = (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
         wave_time /= (GAME_SPEED * perks.game_speed_factor(sim))
 
+        previous_events = events
         cumulative_events += events
+        previous_rewards = rewards
         cumulative_rewards += rewards
         elapsed_time += wave_time
 
@@ -1206,14 +1227,16 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     events = simulate_wave(sim, perks, intro_wave_count)
     # The first wave after intro sprint is guaranteed not to skip.
     events.wave_skip = 0.0
-    rewards = calculate_rewards(sim, perks, events, previous_rewards)
-    previous_rewards = rewards
+    rewards = calculate_rewards(sim, perks, events, previous_events, previous_rewards)
     wave_time = WAVE_DURATION + WAVE_COOLDOWN
     wave_time /= (GAME_SPEED * perks.game_speed_factor(sim))
 
+    previous_events = events
     cumulative_events += events
+    previous_rewards = rewards
     cumulative_rewards += rewards
     elapsed_time += wave_time
+
     yield SimulationWaveResult(
         wave=intro_wave_count,
         elapsed_time=elapsed_time,
@@ -1226,12 +1249,13 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     for wave in range(intro_wave_count + 1, sim.max_waves + 1):
         perks = perk_estimator.estimate(sim, wave, perks)
         events = simulate_wave(sim, perks, wave)
-        rewards = calculate_rewards(sim, perks, events, previous_rewards)
-        previous_rewards = rewards
+        rewards = calculate_rewards(sim, perks, events, previous_events, previous_rewards)
         wave_time = (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
         wave_time /= (GAME_SPEED * perks.game_speed_factor(sim))
 
+        previous_events = events
         cumulative_events += events
+        previous_rewards = rewards
         cumulative_rewards += rewards
         elapsed_time += wave_time
 
@@ -1491,6 +1515,7 @@ def make_sim(args: argparse.Namespace) -> Simulation:
         reward=args.reward,
         sum_total_stone_cost=args.sum_total_stone_cost,
         bhd_bonus=(args.bhd / 100),
+        golden_combo=(args.golden_combo / 100),
         free_upgrade_chances={
             "attack": (args.freeup_chance[0] / 100),
             "defense": (args.freeup_chance[1] / 100),
