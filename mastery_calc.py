@@ -114,7 +114,7 @@ COMMON_MODULE_DROP_CHANCE = 0.03
 COMMON_MODULE_VALUE = 10
 RARE_MODULE_DROP_CHANCE = 0.015
 RARE_MODULE_VALUE = 30
-RECOVERY_PACKAGE_CHANCE = 0.82
+RECOVERY_PACKAGE_CHANCE = 82 # %
 
 # Perk data
 
@@ -277,9 +277,11 @@ class Simulation:
     orb_hits: float = 1.0
     reward: str = "coins"
     sum_total_stone_cost: bool = False
+    bhd_bonus: float = 0
 
     # Workshop stats
     free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
+    package_chance: float = RECOVERY_PACKAGE_CHANCE / 100
     enemy_level_skip_chances: dict[str, float] = dataclasses.field(default_factory=dict)
 
     # Lab levels
@@ -363,7 +365,7 @@ class Perks:
         return 1.0 + bonus
 
     def free_upgrade_chance_bonus(self, sim: Simulation) -> float:
-        return 1.0 + self.perks.get("std-freeup-chance", 0) * PERK_BONUSES["std-freeup-chance"] * sim.standard_perk_bonus()
+        return self.perks.get("std-freeup-chance", 0) * PERK_BONUSES["std-freeup-chance"] * sim.standard_perk_bonus()
 
 
 def free_upgrades_default_factory() -> dict[str, float]:
@@ -519,6 +521,26 @@ def add_common_args(parser: argparse.ArgumentParser):
         type=float,
         default=1.0,
         help="Average portion of enemies hit by orbs [0.0-1.0]",
+    )
+    parser.add_argument(
+        "--freeup-chance",
+        nargs=3,
+        type=int,
+        default=[75, 75, 75],
+        help="Free-upgrade chances (attack %%, defense %%, utility %%)",
+    )
+    parser.add_argument(
+        "--package-chance",
+        type=int,
+        default=RECOVERY_PACKAGE_CHANCE,
+        help="Free-upgrade chances (attack %%, defense %%, utility %%)",
+    )
+    parser.add_argument(
+        "--bhd",
+        choices=[0, 3, 5, 7, 10],
+        type=int,
+        default=0,
+        help="BHD free-upgrade coin multiplier (%%)",
     )
 
     # Reward normalization
@@ -683,6 +705,8 @@ def common_args_description(args: argparse.Namespace, baseline_name: str) -> lis
         desc.append(f"T{args.tier}W{args.wave}")
     if args.orb_hits != 1.0:
         desc.append(f"orbs {args.orb_hits:.2%}")
+    if args.bhd > 0:
+        desc.append(f"bhd {args.bhd}%")
 
     # Reward normalization
     desc.append(args.reward)
@@ -981,7 +1005,7 @@ def simulate_wave(sim: Simulation, perks: Perks, wave: int) -> Events:
     # Assuming "Package After Boss" lab, a package will guaranteed spawn every wave
     # following a boss spawn (ie, when `wave - 1` was a boss wave). Otherwise, the
     # chance is based on workshop, labs, and module effects.
-    package_spawn = RECOVERY_PACKAGE_CHANCE
+    package_spawn = sim.package_chance
     if (wave - 1) % boss_period == 0:
         package_spawn = 1
 
@@ -994,12 +1018,14 @@ def simulate_wave(sim: Simulation, perks: Perks, wave: int) -> Events:
     # 2. `w-2` did not trigger a double skip, but `w-1` triggered a single skip
     wave_skip_chance = double_skip_chance + WAVE_SKIP_CHANCE * (1 - double_skip_chance)
 
+    free_upgrade_bonus = perks.free_upgrade_chance_bonus(sim)
+
     return Events(
         wave=wave,
         wave_skip=wave_skip_chance,
         free_upgrades={
-            name: chance * perks.get("std-freeup-chance", 0) * PERK_BONUSES["std-freeup-chance"]
-            for name, chance in sim.free_upgrade_chances
+            name: chance + free_upgrade_bonus
+            for name, chance in sim.free_upgrade_chances.items()
         },
         recovery_packages=package_spawn,
         enemy_level_skips=sim.enemy_level_skip_chances,
@@ -1016,8 +1042,13 @@ def simulate_wave(sim: Simulation, perks: Perks, wave: int) -> Events:
     )
 
 
-def wave_skip_bonus(events: Events, noskip: float, skip: float) -> float:
+def wave_skip_bonus_lerp(events: Events, noskip: float, skip: float) -> float:
     return (1 - events.wave_skip) * noskip + (events.wave_skip * skip)
+
+
+def wave_skip_bonus_geom(events: Events, value: float) -> float:
+    geom = sum(events.wave_skip ** i for i in range(1, 11))
+    return value ** (1 + geom)
 
 
 def calculate_coins(
@@ -1026,6 +1057,9 @@ def calculate_coins(
     coin_bonus = TIER_COIN_BONUS[sim.tier - 1] * perks.coin_bonus(sim)
     if sim.coin is not None:
         coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
+    if sim.bhd_bonus > 0:
+        bhd_bonus = 1 + sim.bhd_bonus * sum(events.free_upgrades.values())
+        coin_bonus *= wave_skip_bonus_geom(events, bhd_bonus)
 
     orb_bonus = 1.0
     if sim.extra_orb is not None:
@@ -1047,7 +1081,7 @@ def calculate_coins(
         if name == "scatter":
             enemy_coins += sum(1 << i for i in range(1, 5)) * coins_per_enemy["scatter"]
         coins += enemy_coins
-    return wave_skip_bonus(events, coins, previous_rewards.coins * WAVE_SKIP_BONUS)
+    return wave_skip_bonus_lerp(events, coins, previous_rewards.coins * WAVE_SKIP_BONUS)
 
 
 def calculate_cells(
@@ -1066,7 +1100,7 @@ def calculate_cells(
     )
 
     elite_cells = total_elite_count * cells_per_elite
-    return wave_skip_bonus(
+    return wave_skip_bonus_lerp(
         events, elite_cells, previous_rewards.elite_cells * WAVE_SKIP_BONUS
     )
 
@@ -1087,7 +1121,7 @@ def calculate_rerolls(sim: Simulation, events: Events) -> float:
             total_elite_count * CASH_MASTERY_TABLE[sim.cash] * rerolls_per_elite
         )
         # Elites do not drop reroll shards on skipped waves.
-        reroll_shards += wave_skip_bonus(events, elite_rerolls, 0)
+        reroll_shards += wave_skip_bonus_lerp(events, elite_rerolls, 0)
     return reroll_shards
 
 
@@ -1100,7 +1134,7 @@ def calculate_modules(sim: Simulation, events: Events) -> float:
             * RECOVERY_PACKAGE_CHANCE_MASTERY_TABLE[sim.recovery_package]
         )
         # Recovery packages do not provide modules on skipped waves.
-        common_modules += wave_skip_bonus(events, package_modules, 0)
+        common_modules += wave_skip_bonus_lerp(events, package_modules, 0)
     rare_modules = events.enemies["boss"] * RARE_MODULE_DROP_CHANCE
     return common_modules * COMMON_MODULE_VALUE + rare_modules * RARE_MODULE_VALUE
 
@@ -1456,6 +1490,12 @@ def make_sim(args: argparse.Namespace) -> Simulation:
         orb_hits=args.orb_hits,
         reward=args.reward,
         sum_total_stone_cost=args.sum_total_stone_cost,
+        bhd_bonus=(args.bhd / 100),
+        free_upgrade_chances={
+            "attack": (args.freeup_chance[0] / 100),
+            "defense": (args.freeup_chance[1] / 100),
+            "utility": (args.freeup_chance[2] / 100),
+        },
         cash=args.cash,
         coin=args.coin,
         critical_coin=args.critical_coin,
