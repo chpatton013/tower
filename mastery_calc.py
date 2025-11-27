@@ -1810,6 +1810,7 @@ def subcommand_custom(args: argparse.Namespace) -> Plot:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="subcommand")
+    subparsers.required = True
 
     # Simulate a sequence of tier/wave pairs with fixed mastery levels
     tiers_subparser = subparsers.add_parser("tiers")
