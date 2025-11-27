@@ -276,6 +276,7 @@ class Simulation:
     max_waves: int = 0
     orb_hits: float = 1.0
     reward: str = "coins"
+    sum_total_stone_cost: bool = False
 
     # Workshop stats
     free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
@@ -300,6 +301,30 @@ class Simulation:
     recovery_package: int | None = None
     wave_accelerator: int | None = None
     wave_skip: int | None = None
+
+    def stone_cost(self) -> int:
+        if not self.sum_total_stone_cost:
+            return 0 if self.mastery is None else MASTERY_STONE_COSTS[self.mastery]
+        stone_cost = 0
+        if self.cash is not None:
+            stone_cost += MASTERY_STONE_COSTS["cash"]
+        if self.coin is not None:
+            stone_cost += MASTERY_STONE_COSTS["coin"]
+        if self.critical_coin is not None:
+            stone_cost += MASTERY_STONE_COSTS["critical-coin"]
+        if self.enemy_balance is not None:
+            stone_cost += MASTERY_STONE_COSTS["enemy-balance"]
+        if self.extra_orb is not None:
+            stone_cost += MASTERY_STONE_COSTS["extra-orb"]
+        if self.intro_sprint is not None:
+            stone_cost += MASTERY_STONE_COSTS["intro-sprint"]
+        if self.recovery_package is not None:
+            stone_cost += MASTERY_STONE_COSTS["recovery-package"]
+        if self.wave_accelerator is not None:
+            stone_cost += MASTERY_STONE_COSTS["wave-accelerator"]
+        if self.wave_skip is not None:
+            stone_cost += MASTERY_STONE_COSTS["wave-skip"]
+        return stone_cost
 
     def standard_perk_bonus(self) -> float:
         return 1 + self.standard_perk_bonus_lab / 100
@@ -528,6 +553,12 @@ def add_common_args(parser: argparse.ArgumentParser):
         "--roi",
         action="store_true",
         help="Normalize all results against mastery stone cost",
+    )
+    parser.add_argument(
+        "--sum-total-stone-cost",
+        action="store_true",
+        default=False,
+        help="Consider the stone cost of all masteries when normalizing results",
     )
 
     # Output options
@@ -1289,11 +1320,12 @@ def annotate_sims_vs_stone_cost(
     sim_results: list[tuple[Simulation, SimulationRunResult]],
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     for sim, run_result in sim_results:
-        if run_result.relative is None or sim.mastery is None:
+        stone_cost = sim.stone_cost()
+        if run_result.relative is None or stone_cost == 0:
             yield sim, run_result
             continue
 
-        value = run_result.relative / MASTERY_STONE_COSTS[sim.mastery]
+        value = run_result.relative / stone_cost
         yield sim, dataclasses.replace(run_result, roi=value)
 
 
@@ -1369,15 +1401,16 @@ def normalize_sims_vs_stone_cost(
 ) -> Iterator[tuple[Simulation, SimulationRunResult]]:
     for sim, run_result in sim_results:
         normalized_results = []
+        stone_cost = sim.stone_cost()
         roi = None
-        if sim.mastery is None:
+        if stone_cost == 0:
             for wave_result in run_result.wave_results:
                 normalized_results.append(
                     dataclasses.replace(wave_result, cumulative_rewards=Rewards())
                 )
         else:
             for wave_result in run_result.wave_results:
-                factor = 1 / MASTERY_STONE_COSTS[sim.mastery]
+                factor = 1 / stone_cost
                 roi = reward_value(sim, wave_result.cumulative_rewards) * factor
                 normalized_rewards = wave_result.cumulative_rewards * factor
                 normalized_results.append(
@@ -1422,6 +1455,7 @@ def make_sim(args: argparse.Namespace) -> Simulation:
         tier=args.tier,
         orb_hits=args.orb_hits,
         reward=args.reward,
+        sum_total_stone_cost=args.sum_total_stone_cost,
         cash=args.cash,
         coin=args.coin,
         critical_coin=args.critical_coin,
