@@ -1784,6 +1784,29 @@ def subcommand_mastery(args: argparse.Namespace) -> Plot:
     return plot_sim_results(args, title, sim_results)
 
 
+def subcommand_custom(args: argparse.Namespace) -> Plot:
+    args.mastery = None
+    args.tier = None
+    convert_mastery_args(args)
+    config = make_sim(args)
+
+    sims = []
+    raise NotImplementedError("Custom simulation is not implemented")
+
+    baseline_sim_name = sims[0].name
+    sim_results = normalize_sims(args, list(evaluate_sims(sims)), baseline_sim_name)
+    if args.print:
+        print_sim_results(sim_results)
+
+    title = ", ".join(
+        [
+            f"TODO custom title",
+            *common_args_description(args, baseline_sim_name),
+        ]
+    )
+    return plot_sim_results(args, title, sim_results)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="subcommand")
@@ -1820,6 +1843,10 @@ if __name__ == "__main__":
     )
     add_common_args(mastery_subparser)
 
+    # Custom simulation
+    custom_subparser = subparsers.add_parser("custom")
+    add_common_args(custom_subparser)
+
     args = parser.parse_args()
 
     if not 0.0 <= args.orb_hits <= 1.0:
@@ -1835,6 +1862,8 @@ if __name__ == "__main__":
         plot = subcommand_compare(args)
     elif args.subcommand == "mastery":
         plot = subcommand_mastery(args)
+    elif args.subcommand == "custom":
+        plot = subcommand_custom(args)
     else:
         parser.error(f"Invalid subcommand: {args.subcommand}")
     render_plot(plot, show=args.plot, output=args.output)
