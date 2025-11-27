@@ -668,10 +668,6 @@ def calculate_coins(
     }
     if sim.critical_coin is not None:
         coins_per_enemy["basic"] *= 1.0 + CRITICAL_COIN_MASTERY_TABLE[sim.critical_coin]
-    # Elites are not affected by BH coin bonus
-    coins_per_enemy["scatter"] /= BLACK_HOLE_COIN_BONUS
-    coins_per_enemy["vampire"] /= BLACK_HOLE_COIN_BONUS
-    coins_per_enemy["ray"] /= BLACK_HOLE_COIN_BONUS
 
     coins = 0.0
     for name, count in events.enemies.items():
