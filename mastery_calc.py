@@ -1807,7 +1807,7 @@ def subcommand_custom(args: argparse.Namespace) -> Plot:
     return plot_sim_results(args, title, sim_results)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="subcommand")
     subparsers.required = True
@@ -1868,3 +1868,10 @@ if __name__ == "__main__":
     else:
         parser.error(f"Invalid subcommand: {args.subcommand}")
     render_plot(plot, show=args.plot, output=args.output)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BrokenPipeError:
+        pass
