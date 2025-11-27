@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-import bisect
 import argparse
+import bisect
 import copy
 import dataclasses
+import math
 from typing import Iterator, Self
 
 import numpy as np
@@ -18,7 +19,7 @@ import sciform
 
 # Base game data
 
-GAME_SPEED = 6.25 * 0.8
+GAME_SPEED = 5.0 * 0.8
 WAVE_DURATION = 26.0
 WAVE_COOLDOWN = 5.0
 
@@ -113,8 +114,95 @@ COMMON_MODULE_DROP_CHANCE = 0.03
 COMMON_MODULE_VALUE = 10
 RARE_MODULE_DROP_CHANCE = 0.015
 RARE_MODULE_VALUE = 30
-BLACK_HOLE_COIN_BONUS = 11.0
 RECOVERY_PACKAGE_CHANCE = 0.82
+
+# Perk data
+
+STANDARD_PERK_CHANCE = 0.65
+ULTIMATE_PERK_CHANCE = 0.20
+TRADEOFF_PERK_CHANCE = 0.15
+assert STANDARD_PERK_CHANCE + ULTIMATE_PERK_CHANCE + TRADEOFF_PERK_CHANCE == 1.0
+
+# Quantity of each standard perk
+STANDARD_PERKS = {
+    "std-health": 5,
+    "std-damage": 5,
+    "std-coin-bonus": 5,
+    "std-defabs": 5,
+    "std-cash-bonus": 5,
+    "std-regen": 5,
+    "std-interest": 5,
+    "std-lm-damage": 5,
+    "std-freeup-chance": 5,
+    "std-def%": 5,
+    "std-bounce-shot": 3,
+    "std-pwr": 3,
+    "std-orbs": 2,
+    "std-random-uw": 1,
+    "std-game-speed": 1,
+}
+
+# Quantity of each UW perk
+ULTIMATE_PERKS = {
+    "uw-sm": 1,
+    "uw-ps": 1,
+    "uw-dw": 1,
+    "uw-ilm": 1,
+    "uw-gt": 1,
+    "uw-cl": 1,
+    "uw-cf": 1,
+    "uw-bh": 1,
+    "uw-sl": 1,
+}
+
+# Quantity of each TO perk
+TRADEOFF_PERKS = {
+    "to-tower-damage": 1,
+    "to-coin": 1,
+    "to-enemy-health": 1,
+    "to-enemy-damage": 1,
+    "to-enemy-range": 1,
+    "to-enemy-speed": 1,
+    "to-cash": 1,
+    "to-regen": 1,
+    "to-boss-health": 1,
+    "to-lifesteal": 1,
+}
+
+ALL_PERKS = {**STANDARD_PERKS, **ULTIMATE_PERKS, **TRADEOFF_PERKS}
+
+# Bonuses for each perk
+PERK_BONUSES = {
+    "std-coin-bonus": 1.15,
+    "std-pwr": -0.2,
+    "std-game-speed": 1.0,
+    "std-freeup-chance": 0.05,
+    "uw-gt": 1.5,
+    "to-coin": 1.8,
+}
+
+PERK_PRIORITY_ORDER = [
+    "std-pwr",
+    "std-game-speed",
+    "to-coin",
+    "uw-gt",
+    "std-coin-bonus",
+    "std-freeup-chance",
+]
+
+FIRST_PERK_CHOICE = "std-pwr"
+
+PERK_BANS = [
+    "to-tower-damage",
+    "to-enemy-health",
+    "to-enemy-range",
+    "to-enemy-speed",
+    "to-cash",
+    "to-boss-health",
+    "std-defabs",
+    "std-interest",
+]
+
 
 # Card data
 
@@ -193,6 +281,15 @@ class Simulation:
     free_upgrade_chances: dict[str, float] = dataclasses.field(default_factory=dict)
     enemy_level_skip_chances: dict[str, float] = dataclasses.field(default_factory=dict)
 
+    # Lab levels
+    standard_perk_bonus_lab: int = 25
+    improved_tradeoff_perk_lab: int = 10
+    perk_option_quantity_lab: int = 2
+    perk_waves_required_lab: int = 25
+    first_perk_choice: str = FIRST_PERK_CHOICE
+    perk_priority_order: list[str] = dataclasses.field(default_factory=lambda: PERK_PRIORITY_ORDER)
+    perk_bans: list[str] = dataclasses.field(default_factory=lambda: PERK_BANS)
+
     # Mastery levels
     cash: int | None = None
     coin: int | None = None
@@ -203,6 +300,45 @@ class Simulation:
     recovery_package: int | None = None
     wave_accelerator: int | None = None
     wave_skip: int | None = None
+
+    def standard_perk_bonus(self) -> float:
+        return 1 + self.standard_perk_bonus_lab / 100
+
+    def tradeoff_perk_bonus(self) -> float:
+        return 1 + self.improved_tradeoff_perk_lab / 100
+
+    def perk_option_quantity(self) -> int:
+        return 2 + self.perk_option_quantity_lab
+
+    def perk_waves_required(self, base: int) -> int:
+        return base - self.perk_waves_required_lab
+
+
+def perks_default_factory() -> dict[str, float]:
+    return {
+        name: 0.0 for name in ALL_PERKS.keys()
+    }
+
+
+@dataclasses.dataclass
+class Perks:
+    perks: dict[str, float] = dataclasses.field(default_factory=perks_default_factory)
+
+    def pwr_bonus(self, sim: Simulation) -> float:
+        return 1.0 + self.perks.get("std-pwr", 0) * PERK_BONUSES["std-pwr"] * sim.standard_perk_bonus()
+
+    def game_speed_factor(self, sim: Simulation) -> float:
+        return (GAME_SPEED + self.perks.get("std-game-speed", 0) * PERK_BONUSES["std-game-speed"] * sim.standard_perk_bonus()) / GAME_SPEED
+
+    def coin_bonus(self, sim: Simulation) -> float:
+        bonus = 1.0
+        bonus *= self.perks.get("std-coin-bonus", 0) * PERK_BONUSES["std-coin-bonus"] * sim.standard_perk_bonus()
+        bonus *= self.perks.get("uw-gt", 0) * PERK_BONUSES["uw-gt"]
+        bonus *= self.perks.get("to-coin", 0) * PERK_BONUSES["to-coin"] * sim.tradeoff_perk_bonus()
+        return 1.0 + bonus
+
+    def free_upgrade_chance_bonus(self, sim: Simulation) -> float:
+        return 1.0 + self.perks.get("std-freeup-chance", 0) * PERK_BONUSES["std-freeup-chance"] * sim.standard_perk_bonus()
 
 
 def free_upgrades_default_factory() -> dict[str, float]:
@@ -576,6 +712,204 @@ def max_intro_wave(sim: Simulation) -> int:
     )
 
 
+def perk_count_at_wave(
+    sim: Simulation,
+    perks: Perks,
+    wave: int,
+) -> float:
+    pwr_bonus = perks.pwr_bonus(sim)
+    pwr_waves = [
+        (20, sim.perk_waves_required(200) * pwr_bonus),
+        (20, sim.perk_waves_required(250) * pwr_bonus),
+        (10, sim.perk_waves_required(300) * pwr_bonus),
+    ]
+    last_wave = 0
+    perk_count = 0
+    for perk_quantity, waves_per_perk in pwr_waves:
+        max_wave = last_wave + perk_quantity * waves_per_perk
+        if wave < max_wave:
+            return perk_count + ((wave - last_wave) / waves_per_perk)
+        last_wave = max_wave
+        perk_count += perk_quantity
+    return perk_count
+
+
+def perks_confidence_default_factory() -> dict[str, list[float]]:
+    return {
+        perk: [0.0] * qty
+        for perk, qty in ALL_PERKS.items()
+    }
+
+
+@dataclasses.dataclass
+class PerksConfidence:
+    """
+    Confidence that each perk has been selected a given number of times.
+    Factors in first-perk, bans, and priority.
+    """
+
+    count: int = 0
+
+    # For each perk, the confidence that it has been selected 1..n times.
+    # n is the maximum quantity of the perk.
+    perks: dict[str, list[float]] = dataclasses.field(default_factory=perks_confidence_default_factory)
+
+    def __iadd__(self, other: Self) -> Self:
+        for perk in self.perks.keys():
+            for i in range(0, len(self.perks[perk])):
+                self.perks[perk][i] += other.perks[perk][i]
+        return self
+
+    def __add__(self, other: Self) -> Self:
+        result = copy.deepcopy(self)
+        result += other
+        return result
+
+    def __imul__(self, factor: float | int) -> Self:
+        for perk in self.perks.keys():
+            for i in range(0, len(self.perks[perk])):
+                self.perks[perk][i] *= factor
+        return self
+
+    def __mul__(self, factor: float | int) -> Self:
+        result = copy.deepcopy(self)
+        result *= factor
+        return result
+
+    def reduce(self) -> Perks:
+        return Perks(perks={perk: sum(confidences) for perk, confidences in self.perks.items()})
+
+
+def perk_options_default_factory() -> dict[str, float]:
+    return {
+        perk: 0.0
+        for perk in ALL_PERKS.keys()
+    }
+
+
+@dataclasses.dataclass
+class PerkOptions:
+    options: dict[str, float] = dataclasses.field(default_factory=perk_options_default_factory)
+
+    def __iadd__(self, other: Self) -> Self:
+        for perk in self.options.keys():
+            self.options[perk] += other.options[perk]
+        return self
+
+    def __add__(self, other: Self) -> Self:
+        result = copy.deepcopy(self)
+        result += other
+        return result
+
+    def __imul__(self, factor: float | int) -> Self:
+        for perk in self.options.keys():
+            self.options[perk] *= factor
+        return self
+
+    def __mul__(self, factor: float | int) -> Self:
+        result = copy.deepcopy(self)
+        result *= factor
+        return result
+
+    def inorm(self) -> Self:
+        magnitude = sum(self.options.values())
+        if magnitude:
+            for perk in self.options.keys():
+                self.options[perk] /= magnitude
+        return self
+
+    def norm(self) -> Self:
+        result = copy.deepcopy(self)
+        result.inorm()
+        return result
+
+
+@dataclasses.dataclass
+class PerkWaveEstimator:
+    confidences: list[PerksConfidence]
+
+    def lower(self, perk_count: float) -> PerksConfidence:
+        if perk_count < 1.0:
+            return PerksConfidence()
+        return self.confidences[math.floor(perk_count - 1.0)]
+
+    def higher(self, perk_count: float) -> PerksConfidence:
+        if perk_count >= len(self.confidences):
+            return self.confidences[-1]
+        return self.confidences[math.floor(perk_count)]
+
+    def average(self, perk_count: float) -> PerksConfidence:
+        lower_confidence = self.lower(perk_count)
+        upper_confidence = self.higher(perk_count)
+        lambda_ = perk_count % 1.0
+        return lower_confidence + (upper_confidence + lower_confidence * -1.0) * lambda_
+
+    def estimate(self, sim: Simulation, wave: int, perks: Perks) -> Perks:
+        perk_count = sum(perks.perks.values())
+        next_perk_count = perk_count_at_wave(sim, perks, wave)
+        while perk_count < next_perk_count:
+            perk_count = next_perk_count
+            perks = self.average(perk_count).reduce()
+            next_perk_count = perk_count_at_wave(sim, perks, wave)
+        return perks
+
+
+def perk_category_option_chances(sim: Simulation, options: PerkOptions, confidence: PerksConfidence, category: dict[str, int], factor: float) -> PerkOptions:
+    next_options = PerkOptions()
+    for perk in category.keys():
+        if perk not in sim.perk_bans:
+            # Perks can't appear if they are already in the option set, or if their
+            # quantity has been fully exhausted.
+            chance = (1.0 - options.options[perk])
+            chance *= (1.0 - confidence.perks[perk][-1])
+            next_options.options[perk] = chance
+    return next_options.inorm() * factor
+
+
+def perk_option_chances(sim: Simulation, options: PerkOptions, confidence: PerksConfidence) -> PerkOptions:
+    sperks = perk_category_option_chances(sim, options, confidence, STANDARD_PERKS, STANDARD_PERK_CHANCE)
+    uperks =  perk_category_option_chances(sim, options, confidence, ULTIMATE_PERKS, ULTIMATE_PERK_CHANCE)
+    tperks = perk_category_option_chances(sim, options, confidence, TRADEOFF_PERKS, TRADEOFF_PERK_CHANCE)
+    return (sperks + uperks + tperks).inorm()
+
+
+def perk_option_set_chances(sim: Simulation, confidence: PerksConfidence) -> PerkOptions:
+    options = PerkOptions()
+    options_count = sim.perk_option_quantity()
+    if confidence.count == 0:
+        options.options[sim.first_perk_choice] = 1.0
+        options_count -= 1
+    for _ in range(0, options_count):
+        options += perk_option_chances(sim, options, confidence)
+    return options
+
+
+def active_perks_confidence(sim: Simulation, confidence: PerksConfidence) -> PerksConfidence:
+    options = perk_option_set_chances(sim, confidence)
+
+    lower_priority = set(ALL_PERKS.keys())
+    for high_perk in sim.perk_priority_order:
+        lower_priority.remove(high_perk)
+        for lower_perk in lower_priority:
+            options.options[lower_perk] *= (1.0 - options.options[high_perk])
+    options.inorm()
+
+    next_confidence = copy.deepcopy(confidence)
+    next_confidence.count += 1
+    for perk, probseq in next_confidence.perks.items():
+        for i in range(0, min(len(probseq), next_confidence.count)):
+            next_confidence.perks[perk][i] += (1.0 - probseq[i]) * options.options[perk]
+    return next_confidence
+
+
+def active_perks_confidence_sequence(sim: Simulation) -> Iterator[PerksConfidence]:
+    confidence = PerksConfidence()
+    yield confidence
+    for _ in range(0, sum(ALL_PERKS.values())):
+        confidence = active_perks_confidence(sim, confidence)
+        yield confidence
+
+
 def spawn_rate_index(sim: Simulation, wave: int):
     spawn_rate_row = (
         SPAWN_RATE_WAVES
@@ -604,7 +938,7 @@ def elite_spawn_count(sim: Simulation, wave: int) -> float:
     return combined_chance * (1.0 + double_spawn)
 
 
-def simulate_wave(sim: Simulation, wave: int) -> Events:
+def simulate_wave(sim: Simulation, perks: Perks, wave: int) -> Events:
     spawn_index = spawn_rate_index(sim, wave)
     spawn_rate = SPAWN_RATE_SEQUENCE[spawn_index]
     common_spawns = WAVE_DURATION * spawn_rate * SPAWN_RATE_FACTOR
@@ -632,7 +966,10 @@ def simulate_wave(sim: Simulation, wave: int) -> Events:
     return Events(
         wave=wave,
         wave_skip=wave_skip_chance,
-        free_upgrades=sim.free_upgrade_chances,
+        free_upgrades={
+            name: chance * perks.get("std-freeup-chance", 0) * PERK_BONUSES["std-freeup-chance"]
+            for name, chance in sim.free_upgrade_chances
+        },
         recovery_packages=package_spawn,
         enemy_level_skips=sim.enemy_level_skip_chances,
         enemies={
@@ -653,9 +990,9 @@ def wave_skip_bonus(events: Events, noskip: float, skip: float) -> float:
 
 
 def calculate_coins(
-    sim: Simulation, events: Events, previous_rewards: Rewards
+    sim: Simulation, perks: Perks, events: Events, previous_rewards: Rewards
 ) -> float:
-    coin_bonus = TIER_COIN_BONUS[sim.tier - 1]
+    coin_bonus = TIER_COIN_BONUS[sim.tier - 1] * perks.coin_bonus(sim)
     if sim.coin is not None:
         coin_bonus *= COIN_MASTERY_TABLE[sim.coin]
 
@@ -738,10 +1075,10 @@ def calculate_modules(sim: Simulation, events: Events) -> float:
 
 
 def calculate_rewards(
-    sim: Simulation, events: Events, previous_rewards: Rewards
+    sim: Simulation, perks: Perks, events: Events, previous_rewards: Rewards
 ) -> Rewards:
     return Rewards(
-        coins=calculate_coins(sim, events, previous_rewards),
+        coins=calculate_coins(sim, perks, events, previous_rewards),
         elite_cells=calculate_cells(sim, events, previous_rewards),
         reroll_shards=calculate_rerolls(sim, events),
         module_shards=calculate_modules(sim, events),
@@ -761,11 +1098,15 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
         cumulative_rewards=copy.deepcopy(cumulative_rewards),
     )
 
+    perk_estimator = PerkWaveEstimator(confidences=list(active_perks_confidence_sequence(sim)))
+    perks = Perks()
+
     # Intro sprint
 
     intro_wave_count = max_intro_wave(sim)
     for wave in range(1, intro_wave_count):
-        events = simulate_wave(sim, wave)
+        perks = perk_estimator.estimate(sim, wave, perks)
+        events = simulate_wave(sim, perks, wave)
         # The only waves that don't skip during intro sprint are the 1st and every 10th.
         if wave == 1 or wave % 10 == 0:
             events.wave_skip = 0.0
@@ -775,15 +1116,17 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
             events.wave_skip = 1.0
             # Skipped intro waves are guaranteed to not have a boss.
             events.enemies["boss"] = 0
-        rewards = calculate_rewards(sim, events, previous_rewards)
+        rewards = calculate_rewards(sim, perks, events, previous_rewards)
         # No coins, rerolls, or modules are earned during intro sprint, and cells are
         # reduced to only 20%.
         rewards = Rewards(elite_cells=rewards.elite_cells * 0.2)
         previous_rewards = rewards
+        wave_time = (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
+        wave_time /= (GAME_SPEED * perks.game_speed_factor(sim))
 
         cumulative_events += events
         cumulative_rewards += rewards
-        elapsed_time += (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
+        elapsed_time += wave_time
 
         yield SimulationWaveResult(
             wave=wave,
@@ -794,15 +1137,18 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
     # First regular wave after intro sprint (not skippable)
 
-    events = simulate_wave(sim, intro_wave_count)
+    perks = perk_estimator.estimate(sim, intro_wave_count, perks)
+    events = simulate_wave(sim, perks, intro_wave_count)
     # The first wave after intro sprint is guaranteed not to skip.
     events.wave_skip = 0.0
-    rewards = calculate_rewards(sim, events, previous_rewards)
+    rewards = calculate_rewards(sim, perks, events, previous_rewards)
     previous_rewards = rewards
+    wave_time = WAVE_DURATION + WAVE_COOLDOWN
+    wave_time /= (GAME_SPEED * perks.game_speed_factor(sim))
 
     cumulative_events += events
     cumulative_rewards += rewards
-    elapsed_time += WAVE_DURATION + WAVE_COOLDOWN
+    elapsed_time += wave_time
     yield SimulationWaveResult(
         wave=intro_wave_count,
         elapsed_time=elapsed_time,
@@ -813,13 +1159,16 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
     # Regular waves
 
     for wave in range(intro_wave_count + 1, sim.max_waves + 1):
-        events = simulate_wave(sim, wave)
-        rewards = calculate_rewards(sim, events, previous_rewards)
+        perks = perk_estimator.estimate(sim, wave, perks)
+        events = simulate_wave(sim, perks, wave)
+        rewards = calculate_rewards(sim, perks, events, previous_rewards)
         previous_rewards = rewards
+        wave_time = (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
+        wave_time /= (GAME_SPEED * perks.game_speed_factor(sim))
 
         cumulative_events += events
         cumulative_rewards += rewards
-        elapsed_time += (WAVE_DURATION + WAVE_COOLDOWN) * (1 - events.wave_skip)
+        elapsed_time += wave_time
 
         yield SimulationWaveResult(
             wave=wave,
@@ -867,6 +1216,13 @@ def rewards_at_time(run_result: SimulationRunResult, elapsed_time: float) -> Rew
     lower_rewards = lower_result.cumulative_rewards
     higher_rewards = higher_result.cumulative_rewards
     return lower_rewards + (higher_rewards - lower_rewards) * lambda_
+
+
+def rewards_at_wave(run_result: SimulationRunResult, wave: int) -> Rewards:
+    index = bisect.bisect_left(
+        run_result.wave_results, wave, key=lambda x: x.wave
+    )
+    return run_result.wave_results[index].cumulative_rewards
 
 
 def reward_value(sim: Simulation, rewards: Rewards) -> float:
@@ -1241,12 +1597,9 @@ def plot_sim_results(
             if wave_result.wave not in waves_to_plot:
                 continue
             value = reward_value(sim, wave_result.cumulative_rewards)
-            line.xs.append(wave_result.elapsed_time)
+            line.xs.append(wave_result.elapsed_time / 3600)
             line.ys.append(value)
         plot.lines.append(line)
-
-    for line in plot.lines:
-        line.xs = [x / 3600 / GAME_SPEED for x in line.xs]
 
     if args.relative and args.crop:
         plot.bottom, plot.top = calculate_margins(sim_results)
