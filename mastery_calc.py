@@ -63,6 +63,9 @@ COIN_DROP_TABLE["scatter"] = 4.0
 COIN_DROP_TABLE["vampire"] = 4.0
 COIN_DROP_TABLE["ray"] = 4.0
 COIN_DROP_TABLE["boss"] = 0.0
+COIN_DROP_TABLE["saboteur"] = 0.0
+COIN_DROP_TABLE["commander"] = 0.0
+COIN_DROP_TABLE["overcharge"] = 0.0
 
 ELITE_SPAWN_CHANCE_TABLE = [0.00, 0.01, 0.04, 0.09, 0.15, 0.24, 0.36, 0.48, 0.63, 0.81, 1.00]
 ELITE_SINGLE_SPAWN_WAVES_TABLE = [
@@ -109,8 +112,27 @@ ELITE_DOUBLE_SPAWN_WAVES_TABLE = [
 assert all(len(row) == len(ELITE_SPAWN_CHANCE_TABLE) for row in ELITE_DOUBLE_SPAWN_WAVES_TABLE)
 assert len(ELITE_SINGLE_SPAWN_WAVES_TABLE) == len(ELITE_DOUBLE_SPAWN_WAVES_TABLE)
 
-REROLL_SHARD_DROP_CHANCE = 0.15
-COMMON_MODULE_DROP_CHANCE = 0.03
+FLEET_MIN_WAVE_SPAWN_TABLE = [*([None] * 13), 2495, 1495, 995, 495, 95, 45, 5, 5]
+FLEET_SPAWN_PERIOD_WAVE_TABLE = [*([None] * 13), 1000, 750, 500, 250, 100, 50, 10, 10]
+FLEET_SPAWN_COUNT_TABLE = [*([None] * 13), 1, 1, 1, 1, 1, 1, 1, 2]
+FLEET_REROLL_SHARD_DROP_TABLE = [*([None] * 13), 1080, 1200, 1350, 1500, 1650, 1800, 1950, 2100]
+assert len(FLEET_MIN_WAVE_SPAWN_TABLE) == len(FLEET_SPAWN_PERIOD_WAVE_TABLE)
+assert len(FLEET_MIN_WAVE_SPAWN_TABLE) == len(FLEET_SPAWN_COUNT_TABLE)
+assert len(FLEET_MIN_WAVE_SPAWN_TABLE) == len(FLEET_REROLL_SHARD_DROP_TABLE)
+
+FLEET_MODULE_SHARD_DROP_TABLE = [
+    (1, 5), (250, 6), (500, 7), (750, 8),
+    (1000, 9), (1250, 10), (1500, 11), (1750, 12),
+    (2000, 13), (2250, 14), (2500, 15), (2750, 16),
+    (3000, 17), (3250, 18), (3500, 19), (3750, 20),
+    (4000, 21), (4250, 22), (4500, 23), (4750, 24),
+    (5000, 25),
+]
+
+FLEET_REROLL_SHARD_DROP_CHANCE = 0.8
+FLEET_MODULE_SHARD_DROP_CHANCE = 0.2
+BOSS_REROLL_SHARD_DROP_CHANCE = 0.15
+BOSS_COMMON_MODULE_DROP_CHANCE = 0.03
 COMMON_MODULE_VALUE = 10
 RARE_MODULE_DROP_CHANCE = 0.015
 RARE_MODULE_VALUE = 30
@@ -405,6 +427,9 @@ class Events:
 
     def elite_enemy_count(self) -> float:
         return self.enemies["scatter"] + self.enemies["vampire"] + self.enemies["ray"]
+
+    def fleet_enemy_count(self) -> float:
+        return self.enemies["saboteur"] + self.enemies["commander"] + self.enemies["overcharge"]
 
     def scatter_children_count(self) -> float:
         # Each scatter splits in half 4 times.
@@ -1012,11 +1037,33 @@ def elite_spawn_count(sim: Simulation, wave: int) -> float:
     return combined_chance * (1.0 + double_spawn)
 
 
+def fleet_spawn_count(sim: Simulation, wave: int) -> float:
+    min_wave = FLEET_MIN_WAVE_SPAWN_TABLE[sim.tier - 1]
+    spawn_period = FLEET_SPAWN_PERIOD_WAVE_TABLE[sim.tier - 1]
+    spawn_count = FLEET_SPAWN_COUNT_TABLE[sim.tier - 1]
+    if min_wave is None or min_wave > wave:
+        return 0
+    assert spawn_period is not None
+    assert spawn_count is not None
+
+    if (wave - min_wave) % spawn_period == 0:
+        return spawn_count
+    return 0
+
+
+def fleet_shard_reward(sim: Simulation, wave: int) -> float:
+    index = bisect.bisect(FLEET_MODULE_SHARD_DROP_TABLE, wave, key=lambda x: x[0] if x is not None else 0)
+    index = min(index, len(FLEET_MODULE_SHARD_DROP_TABLE) - 1)
+    return FLEET_MODULE_SHARD_DROP_TABLE[index][1]
+
+
 def simulate_wave(sim: Simulation, perks: Perks, wave: int) -> Events:
     spawn_index = spawn_rate_index(sim, wave)
     spawn_rate = SPAWN_RATE_SEQUENCE[spawn_index]
     common_spawns = WAVE_DURATION * spawn_rate * SPAWN_RATE_FACTOR
     elite_spawns = elite_spawn_count(sim, wave)
+    fleet_spawns = fleet_spawn_count(sim, wave)
+    fleet_children_count = (10 + 14) / 2 # Average of random number between 10-14
 
     # Boss spawns are binary, once every N waves based on tier.
     boss_period = TIER_BOSS_PERIOD[sim.tier - 1]
@@ -1039,6 +1086,23 @@ def simulate_wave(sim: Simulation, perks: Perks, wave: int) -> Events:
 
     free_upgrade_bonus = perks.free_upgrade_chance_bonus(sim)
 
+    enemies = {
+        **{
+            name: common_spawns * row[spawn_index]
+            for name, row in SPAWN_CHANCE_TABLE.items()
+        },
+        "boss": boss_spawn,
+        "scatter": elite_spawns / 3,
+        "vampire": elite_spawns / 3,
+        "ray": elite_spawns / 3,
+        "saboteur": fleet_spawns / 3,
+        "commander": fleet_spawns / 3,
+        "overcharge": fleet_spawns / 3,
+    }
+    enemies["fast"] += enemies["saboteur"] * fleet_children_count
+    enemies["tank"] += enemies["commander"] * fleet_children_count
+    enemies["ranged"] += enemies["overcharge"] * fleet_children_count
+
     return Events(
         wave=wave,
         wave_skip=wave_skip_chance,
@@ -1048,16 +1112,7 @@ def simulate_wave(sim: Simulation, perks: Perks, wave: int) -> Events:
         },
         recovery_packages=package_spawn,
         enemy_level_skips=sim.enemy_level_skip_chances,
-        enemies={
-            **{
-                name: common_spawns * row[spawn_index]
-                for name, row in SPAWN_CHANCE_TABLE.items()
-            },
-            "boss": boss_spawn,
-            "scatter": elite_spawns / 3,
-            "vampire": elite_spawns / 3,
-            "ray": elite_spawns / 3,
-        },
+        enemies=enemies,
     )
 
 
@@ -1129,7 +1184,14 @@ def calculate_cells(
 
 def calculate_rerolls(sim: Simulation, events: Events) -> float:
     rerolls_per_boss = TIER_REROLL_DROP[sim.tier - 1]
-    reroll_shards = events.enemies["boss"] * REROLL_SHARD_DROP_CHANCE * rerolls_per_boss
+    boss_rerolls = events.enemies["boss"] * BOSS_REROLL_SHARD_DROP_CHANCE * rerolls_per_boss
+
+    total_fleet_count = events.fleet_enemy_count()
+    rerolls_per_fleet = FLEET_REROLL_SHARD_DROP_TABLE[sim.tier - 1]
+    fleet_rerolls = total_fleet_count * FLEET_REROLL_SHARD_DROP_CHANCE * rerolls_per_fleet
+
+    reroll_shards = boss_rerolls + fleet_rerolls
+
     if sim.cash is not None:
         # Each type of elite drops reroll shards with cash mastery.
         total_elite_count = events.elite_enemy_count()
@@ -1145,7 +1207,7 @@ def calculate_rerolls(sim: Simulation, events: Events) -> float:
 
 
 def calculate_modules(sim: Simulation, events: Events) -> float:
-    common_modules = events.enemies["boss"] * COMMON_MODULE_DROP_CHANCE
+    common_modules = events.enemies["boss"] * BOSS_COMMON_MODULE_DROP_CHANCE
     if sim.recovery_package is not None:
         # Recovery packages have a chance to provide modules.
         package_modules = (
@@ -1154,8 +1216,17 @@ def calculate_modules(sim: Simulation, events: Events) -> float:
         )
         # Recovery packages do not provide modules on skipped waves.
         common_modules += wave_skip_bonus_lerp(events, package_modules, 0)
+    module_shards = common_modules * COMMON_MODULE_VALUE
+
     rare_modules = events.enemies["boss"] * RARE_MODULE_DROP_CHANCE
-    return common_modules * COMMON_MODULE_VALUE + rare_modules * RARE_MODULE_VALUE
+    module_shards += rare_modules * RARE_MODULE_VALUE
+
+    total_fleet_count = events.fleet_enemy_count()
+    shards_per_fleet = fleet_shard_reward(sim, events.wave)
+    fleet_shards = total_fleet_count * FLEET_MODULE_SHARD_DROP_CHANCE * shards_per_fleet
+    module_shards += fleet_shards
+
+    return module_shards
 
 
 def calculate_rewards(
