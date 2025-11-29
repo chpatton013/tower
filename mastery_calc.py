@@ -114,8 +114,8 @@ assert len(ELITE_SINGLE_SPAWN_WAVES_TABLE) == len(ELITE_DOUBLE_SPAWN_WAVES_TABLE
 
 FLEET_MIN_WAVE_SPAWN_TABLE = [*([None] * 13), 2495, 1495, 995, 495, 95, 45, 5, 5]
 FLEET_SPAWN_PERIOD_WAVE_TABLE = [*([None] * 13), 1000, 750, 500, 250, 100, 50, 10, 10]
-FLEET_SPAWN_COUNT_TABLE = [*([None] * 13), 1, 1, 1, 1, 1, 1, 1, 2]
-FLEET_REROLL_SHARD_DROP_TABLE = [*([None] * 13), 1080, 1200, 1350, 1500, 1650, 1800, 1950, 2100]
+FLEET_SPAWN_COUNT_TABLE = [*([0] * 13), 1, 1, 1, 1, 1, 1, 1, 2]
+FLEET_REROLL_SHARD_DROP_TABLE = [*([0] * 13), 1080, 1200, 1350, 1500, 1650, 1800, 1950, 2100]
 assert len(FLEET_MIN_WAVE_SPAWN_TABLE) == len(FLEET_SPAWN_PERIOD_WAVE_TABLE)
 assert len(FLEET_MIN_WAVE_SPAWN_TABLE) == len(FLEET_SPAWN_COUNT_TABLE)
 assert len(FLEET_MIN_WAVE_SPAWN_TABLE) == len(FLEET_REROLL_SHARD_DROP_TABLE)
@@ -292,6 +292,7 @@ class Simulation:
     name: str = ""
     mastery: str | None = None
     level: int | None = None
+    skip: bool = False
 
     # Estimates / inputs
     tier: int = 1
@@ -532,7 +533,7 @@ class Plot:
     ylabel: str
     top: float | None = None
     bottom: float | None = None
-    lines: list[PlotLine] = dataclasses.field(default_factory=list)
+    lines: list[PlotLine | None] = dataclasses.field(default_factory=list)
 
 
 # Argument handling
@@ -1340,8 +1341,11 @@ def simulate_run(sim: Simulation) -> Iterator[SimulationWaveResult]:
 
 def evaluate_sims(
     sims: list[Simulation],
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     for sim in sims:
+        if sim.skip:
+            yield sim, None
+            continue
         wave_results = list(simulate_run(sim))
         total = reward_value(sim, wave_results[-1].cumulative_rewards)
         yield sim, SimulationRunResult(wave_results=wave_results, total=total)
@@ -1410,12 +1414,17 @@ def relative_rewards(lhs: Rewards, rhs: Rewards) -> Rewards:
 
 
 def truncate_sims_to_shortest(
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     min_time = min(
-        run_result.wave_results[-1].elapsed_time for _, run_result in sim_results
+        run_result.wave_results[-1].elapsed_time
+        for _, run_result in sim_results
+        if run_result is not None
     )
     for sim, run_result in sim_results:
+        if run_result is None:
+            yield sim, None
+            continue
         index = bisect.bisect(
             run_result.wave_results, min_time, key=lambda x: x.elapsed_time
         )
@@ -1427,28 +1436,35 @@ def truncate_sims_to_shortest(
 
 
 def annotate_sims_vs_baseline(
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
     baseline_sim_name: str,
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     baseline_sim, baseline_results = next(
         (sim, run_result)
         for sim, run_result in sim_results
         if sim.name == baseline_sim_name
     )
+    assert baseline_results is not None
     baseline_value = reward_value(
         baseline_sim, baseline_results.wave_results[-1].cumulative_rewards
     )
 
     for sim, run_result in sim_results:
+        if run_result is None:
+            yield sim, None
+            continue
         run_max = reward_value(sim, run_result.wave_results[-1].cumulative_rewards)
         relative = (run_max / baseline_value - 1.0) if baseline_value != 0 else 0.0
         yield sim, dataclasses.replace(run_result, relative=relative)
 
 
 def annotate_sims_vs_stone_cost(
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     for sim, run_result in sim_results:
+        if run_result is None:
+            yield sim, None
+            continue
         stone_cost = sim.stone_cost()
         if run_result.relative is None or stone_cost == 0:
             yield sim, run_result
@@ -1459,14 +1475,19 @@ def annotate_sims_vs_stone_cost(
 
 
 def difference_sims_vs_baseline(
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
     baseline_sim_name: str,
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     baseline_results = next(
-        run_result for sim, run_result in sim_results if sim.name == baseline_sim_name
+        run_result for sim, run_result in sim_results
+        if sim.name == baseline_sim_name
     )
+    assert baseline_results is not None
 
     for sim, run_result in sim_results:
+        if run_result is None:
+            yield sim, None
+            continue
         difference_results = []
         for wave_result in run_result.wave_results:
             baseline_rewards = rewards_at_time(
@@ -1480,9 +1501,12 @@ def difference_sims_vs_baseline(
 
 
 def normalize_sims_vs_elapsed(
-    sim_results: list[tuple[Simulation, SimulationRunResult]]
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]]
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     for sim, run_result in sim_results:
+        if run_result is None:
+            yield sim, None
+            continue
         wave_results = iter(run_result.wave_results)
         normalized_results = [
             copy.deepcopy(next(wave_results)),
@@ -1499,14 +1523,18 @@ def normalize_sims_vs_elapsed(
 
 
 def normalize_sims_vs_baseline(
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
     baseline_sim_name: str,
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     baseline_results = next(
         run_result for sim, run_result in sim_results if sim.name == baseline_sim_name
     )
+    assert baseline_results is not None
 
     for sim, run_result in sim_results:
+        if run_result is None:
+            yield sim, None
+            continue
         normalized_results = []
         relative = 0.0
         for wave_result in run_result.wave_results:
@@ -1526,9 +1554,12 @@ def normalize_sims_vs_baseline(
 
 
 def normalize_sims_vs_stone_cost(
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
-) -> Iterator[tuple[Simulation, SimulationRunResult]]:
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
+) -> Iterator[tuple[Simulation, SimulationRunResult | None]]:
     for sim, run_result in sim_results:
+        if run_result is None:
+            yield sim, None
+            continue
         normalized_results = []
         stone_cost = sim.stone_cost()
         roi = None
@@ -1554,9 +1585,9 @@ def normalize_sims_vs_stone_cost(
 
 def normalize_sims(
     args: argparse.Namespace,
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
     baseline_sim_name: str,
-) -> list[tuple[Simulation, SimulationRunResult]]:
+) -> list[tuple[Simulation, SimulationRunResult | None]]:
     if args.truncate:
         sim_results = list(truncate_sims_to_shortest(sim_results))
     if args.elapsed:
@@ -1626,8 +1657,9 @@ def mastery_sim(
     mastery: str,
     level: int | None,
     rerolls_with_cash: int | None,
+    omit_masteries: set[str] = set(),
 ) -> Simulation:
-    sim = dataclasses.replace(sim, mastery=mastery, level=level)
+    sim = dataclasses.replace(sim, mastery=mastery, level=level, skip=(mastery in omit_masteries))
 
     if level is None:
         sim = dataclasses.replace(sim, name=f"{mastery}: locked")
@@ -1659,7 +1691,7 @@ def mastery_sim(
 
 
 def calculate_margins(
-    sim_results: list[tuple[Simulation, SimulationRunResult]]
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]]
 ) -> tuple[float, float]:
     # Produce bottom/top margins for a plot attempting to fit all the important data
     # points, which must include at least the last 2/3 of data points (by time).
@@ -1676,6 +1708,8 @@ def calculate_margins(
     min_time = float("inf")
     max_time = float("-inf")
     for _, run_result in sim_results:
+        if run_result is None:
+            continue
         for wave_result in run_result.wave_results:
             min_time = min(min_time, wave_result.elapsed_time)
             max_time = max(max_time, wave_result.elapsed_time)
@@ -1688,6 +1722,8 @@ def calculate_margins(
     max_inlier = float("-inf")
     values = []
     for sim, run_result in sim_results:
+        if run_result is None:
+            continue
         for wave_result in run_result.wave_results:
             value = reward_value(sim, wave_result.cumulative_rewards)
             min_value = min(min_value, value)
@@ -1742,7 +1778,7 @@ def interesting_waves(sim: Simulation) -> set[int]:
 def plot_sim_results(
     args: argparse.Namespace,
     title: str,
-    sim_results: list[tuple[Simulation, SimulationRunResult]],
+    sim_results: list[tuple[Simulation, SimulationRunResult | None]],
 ) -> Plot:
     ylabel = args.reward
     if args.elapsed:
@@ -1756,6 +1792,10 @@ def plot_sim_results(
 
     plot = Plot(title=title, xlabel="Elapsed time (h)", ylabel=ylabel)
     for sim, run_result in sim_results:
+        if run_result is None:
+            plot.lines.append(None)
+            continue
+
         line = PlotLine(
             name=sim.name,
             mastery=sim.mastery,
@@ -1783,6 +1823,8 @@ def render_plot(plot: Plot, /, show: bool = True, output: str | None = None):
     colors = list(mcolors.TABLEAU_COLORS.values())
 
     for i, line in enumerate(plot.lines):
+        if line is None:
+            continue
         label = f"{line.name}"
         if line.relative is not None:
             label += f"\n({line.relative:+.2%})"
@@ -1829,8 +1871,11 @@ def si_format(value: float) -> str:
     return formatter(value)
 
 
-def print_sim_results(sim_results: list[tuple[Simulation, SimulationRunResult]]):
+def print_sim_results(sim_results: list[tuple[Simulation, SimulationRunResult | None]]):
     for sim, run_result in sim_results:
+        if run_result is None:
+            print(f"{sim.name}: skipped")
+            continue
         assert run_result.total is not None
         message = f"{sim.name}: total={si_format(run_result.total)}"
         if run_result.relative is not None:
@@ -1876,7 +1921,7 @@ def subcommand_compare(args: argparse.Namespace) -> Plot:
     baseline_sim = dataclasses.replace(config, name=baseline_sim_name)
 
     sims = [baseline_sim] + [
-        mastery_sim(config, mastery, args.level, args.rerolls_with_cash)
+        mastery_sim(config, mastery, args.level, args.rerolls_with_cash, args.omit)
         for mastery in MASTERY_DISPLAY_NAMES.keys()
     ]
     sim_results = normalize_sims(args, list(evaluate_sims(sims)), baseline_sim_name)
@@ -1967,6 +2012,12 @@ def main():
         choices=MASTERY_LEVEL_NAMES,
         default="1",
         help="Compare all masteries at this level",
+    )
+    compare_subparser.add_argument(
+        "--omit",
+        choices=MASTERY_DISPLAY_NAMES.keys(),
+        default=set(),
+        help="Omit masteries from the comparison",
     )
     add_common_args(compare_subparser)
 

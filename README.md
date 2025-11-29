@@ -51,6 +51,10 @@ Simulation events
 ```
 [ --tier=TIER ] # Which tier to simulate
 [ --orb-hits=ORB_HIT_RATIO ] # Portion of enemies struck by orbs
+[ --freeup-chance ATK% DEF% UTL% ] # Free upgrade %s chances before perks
+[ --package-chance=PKG% ] # Recovery package % chance
+[ --bhd=BHD% ] # BHD coin bonus %
+[ --golden-combo=GT+% ] # Golden Combo bonus %
 ```
 Tier must be between 1-18, and orb hits must be between 0-1. Both default to 1
 if not specified.
@@ -104,6 +108,13 @@ each option is `locked` if not specified.
 # over a 10k wave run with intro sprint mastery level set to 3. Show results
 # relative to the baseline.
 ./mastery_calc.py mastery 10000 wave-accelerator --intro-sprint=3 --relative
+
+# Compare cumulative coin earnings from each mastery at level 9 with custom free
+# upgrade chances, BHD bonus, and golden combo bonus. Normalize results relative
+# to elapsed run duration. Show results relative to the baseline, normalized by
+# stone cost.
+./mastery_calc.py compare 10000 --level=9 --elapsed --relative --roi \
+  --reward=coins --freeup-chance 89.76 91.46 89.7 --bhd=10 --golden-combo=0.15
 ```
 
 ## Results summary
@@ -304,11 +315,13 @@ and so is not beneficial to model.
 - Waves are modeled atomically, assuming that all enemies spawned in the wave
   are killed during that wave, and that no enemy lives long enough to have its
   coin rewards reduced by staleness.
-
-### Bugs
-
-- BHD's interaction with free upgrade count is not modeled.
-- GT+'s interaction with enemy spawn count is not modeled.
+- The effect of Golden Combo (GT+) is approximated by ignoring GT duration and
+  cooldown. We assume that all enemies spawned in the current and previous waves
+  contribute to the current wave's golden combo bonus.
+- The effect of Black Hole Digestor (BHD) is approximated by estimating the
+  probability of sequential wave skips back by 10 waves, and by ignoring the
+  fact that WS# has a larger impact on sequential wave skips than it does on
+  average wave skips.
 
 ### Future work
 
