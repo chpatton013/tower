@@ -93,10 +93,16 @@ def compare(
 
 def generate_commands(args: argparse.Namespace) -> Iterator[list[str]]:
     def coins_extra_names(level: int) -> str:
-        return "-".join([f"{m}{level}" for m in ["WA"]])
+        return "-".join([f"{m}{level}" for m in ["IS", "WA"]])
 
     def coins_extra_args(level: int) -> list[str]:
-        return [f"--{m}={level}" for m in ["wave-accelerator"]]
+        return [f"--{m}={level}" for m in ["intro-sprint", "wave-accelerator"]]
+
+    def cells_extra_names(level: int) -> str:
+        return "-".join([f"{m}{level}" for m in ["IS", "EB"]])
+
+    def cells_extra_args(level: int) -> list[str]:
+        return [f"--{m}={level}" for m in ["intro-sprint", "enemy-balance"]]
 
     def rerolls_extra_names(level: int) -> str:
         return "-".join([f"{m}{level}" for m in ["Cash", "EB"]])
@@ -104,103 +110,57 @@ def generate_commands(args: argparse.Namespace) -> Iterator[list[str]]:
     def rerolls_extra_args(level: int) -> list[str]:
         return [f"--{m}={level}" for m in ["cash", "enemy-balance"]]
 
+    def modules_extra_names(level: int) -> str:
+        return "-".join([f"{m}{level}" for m in ["IS", "RPC"]])
+
+    def modules_extra_args(level: int) -> list[str]:
+        return [f"--{m}={level}" for m in ["intro-sprint", "recovery-package"]]
+
     tiers_sims = {11: 10000, 12: 8000, 13: 6000, 14: 4000}
+    gt_sims = {0: "000", 0.15: "015", 0.30: "030", 0.45: "045"}
+    bhd_sims = {0: "0", 3: "3", 5: "5", 7: "7", 10: "10"}
     commands = [
-        tiers(
-            args,
-            list(tiers_sims.items()),
-            "coins",
-            extra_name=coins_extra_names(0),
-            extra_args=coins_extra_args(0),
-        ),
-        tiers(
-            args,
-            list(tiers_sims.items()),
-            "coins",
-            extra_name=coins_extra_names(4),
-            extra_args=coins_extra_args(4),
-        ),
-        tiers(
-            args,
-            list(tiers_sims.items()),
-            "coins",
-            extra_name=coins_extra_names(9),
-            extra_args=coins_extra_args(9),
-        ),
+        tiers(args, list(tiers_sims.items()), "coins"),
+        tiers(args, list(tiers_sims.items()), "coins", extra_name=coins_extra_names(0), extra_args=coins_extra_args(0)),
+        tiers(args, list(tiers_sims.items()), "coins", extra_name=coins_extra_names(9), extra_args=coins_extra_args(9)),
         tiers(args, list(tiers_sims.items()), "cells"),
-        tiers(
-            args,
-            list(tiers_sims.items()),
-            "rerolls",
-            extra_name=rerolls_extra_names(0),
-            extra_args=rerolls_extra_args(0),
-        ),
-        tiers(
-            args,
-            list(tiers_sims.items()),
-            "rerolls",
-            extra_name=rerolls_extra_names(9),
-            extra_args=rerolls_extra_args(9),
-        ),
-        compare(args, tiers_sims[11], 11, "cells", 0),
-        compare(args, tiers_sims[11], 11, "cells", 4),
-        compare(args, tiers_sims[11], 11, "cells", 9),
-        compare(args, tiers_sims[11], 11, "coins", 0),
-        compare(args, tiers_sims[11], 11, "coins", 0, extra_name="roi", extra_args=["--roi"]),
-        compare(args, tiers_sims[11], 11, "coins", 4),
-        compare(args, tiers_sims[11], 11, "coins", 4, extra_name="roi", extra_args=["--roi"]),
-        compare(args, tiers_sims[11], 11, "coins", 9),
-        compare(args, tiers_sims[11], 11, "coins", 9, extra_name="roi", extra_args=["--roi"]),
-        compare(args, tiers_sims[11], 11, "rerolls", 0),
-        compare(
-            args,
-            tiers_sims[11],
-            11,
-            "rerolls",
-            0,
-            extra_name="Cash0",
-            extra_args=["--rerolls-with-cash=0"],
-        ),
-        compare(
-            args,
-            tiers_sims[11],
-            11,
-            "rerolls",
-            4,
-            extra_name="Cash0",
-            extra_args=["--rerolls-with-cash=0"],
-        ),
-        compare(args, tiers_sims[11], 11, "modules", 0),
-        compare(args, tiers_sims[14], 14, "cells", 0),
-        compare(args, tiers_sims[14], 14, "cells", 4),
-        compare(args, tiers_sims[14], 14, "cells", 9),
-        compare(args, tiers_sims[14], 14, "coins", 0),
-        compare(args, tiers_sims[14], 14, "coins", 0, extra_name="roi", extra_args=["--roi"]),
-        compare(args, tiers_sims[14], 14, "coins", 4),
-        compare(args, tiers_sims[14], 14, "coins", 4, extra_name="roi", extra_args=["--roi"]),
-        compare(args, tiers_sims[14], 14, "coins", 9),
-        compare(args, tiers_sims[14], 14, "coins", 9, extra_name="roi", extra_args=["--roi"]),
-        compare(args, tiers_sims[14], 14, "rerolls", 0),
-        compare(
-            args,
-            tiers_sims[14],
-            14,
-            "rerolls",
-            0,
-            extra_name="Cash0",
-            extra_args=["--rerolls-with-cash=0"],
-        ),
-        compare(
-            args,
-            tiers_sims[14],
-            14,
-            "rerolls",
-            4,
-            extra_name="Cash0",
-            extra_args=["--rerolls-with-cash=0"],
-        ),
-        compare(args, tiers_sims[14], 14, "modules", 0),
+        tiers(args, list(tiers_sims.items()), "cells", extra_name=cells_extra_names(0), extra_args=cells_extra_args(0)),
+        tiers(args, list(tiers_sims.items()), "cells", extra_name=cells_extra_names(9), extra_args=cells_extra_args(9)),
+        tiers(args, list(tiers_sims.items()), "rerolls"),
+        tiers(args, list(tiers_sims.items()), "rerolls", extra_name=rerolls_extra_names(0), extra_args=rerolls_extra_args(0)),
+        tiers(args, list(tiers_sims.items()), "rerolls", extra_name=rerolls_extra_names(9), extra_args=rerolls_extra_args(9)),
+        tiers(args, list(tiers_sims.items()), "modules"),
+        tiers(args, list(tiers_sims.items()), "modules", extra_name=modules_extra_names(0), extra_args=modules_extra_args(0)),
+        tiers(args, list(tiers_sims.items()), "modules", extra_name=modules_extra_names(9), extra_args=modules_extra_args(9)),
     ]
+    for level in [2, 9]:
+        for gt, gt_name in gt_sims.items():
+            bhd = 7
+            bhd_name = bhd_sims[bhd]
+            commands += [
+                compare(args, tiers_sims[11], 11, "coins", level, extra_name=f"gt{gt_name}-roi", extra_args=[f"--golden-combo={gt}", "--roi"]),
+                compare(args, tiers_sims[14], 14, "coins", level, extra_name=f"gt{gt_name}-roi-noIS", extra_args=[f"--golden-combo={gt}", "--roi", "--omit=intro-sprint"]),
+                compare(args, tiers_sims[11], 11, "coins", level, extra_name=f"bhd{bhd_name}-gt{gt_name}-roi", extra_args=[f"--bhd={bhd}", f"--golden-combo={gt}", "--roi"]),
+                compare(args, tiers_sims[14], 14, "coins", level, extra_name=f"bhd{bhd_name}-gt{gt_name}-roi", extra_args=[f"--bhd={bhd}", f"--golden-combo={gt}", "--roi"]),
+                compare(args, tiers_sims[14], 14, "coins", level, extra_name=f"bhd{bhd_name}-gt{gt_name}-roi-noIS", extra_args=[f"--bhd={bhd}", f"--golden-combo={gt}", "--roi", "--omit=intro-sprint"]),
+            ]
+    for tier in [11, 14]:
+        for level in [2, 9]:
+            for bhd, bhd_name in bhd_sims.items():
+                commands += [
+                    compare(args, tiers_sims[tier], tier, "coins", level, extra_name=f"bhd{bhd_name}-roi", extra_args=[f"--bhd={bhd}", "--roi"]),
+                    compare(args, tiers_sims[tier], tier, "coins", level, extra_name=f"bhd{bhd_name}-roi-noIS", extra_args=[f"--bhd={bhd}", "--roi", "--omit=intro-sprint"]),
+                ]
+        for level in [0, 4, 9]:
+            commands += [
+                compare(args, tiers_sims[tier], tier, "cells", level),
+                compare(args, tiers_sims[tier], tier, "coins", level),
+                compare(args, tiers_sims[tier], tier, "coins", level, extra_name="roi", extra_args=["--roi"]),
+                compare(args, tiers_sims[tier], tier, "coins", level, extra_name="roi-noIS", extra_args=["--roi", "--omit=intro-sprint"]),
+                compare(args, tiers_sims[tier], tier, "rerolls", level),
+                compare(args, tiers_sims[tier], tier, "rerolls", level, extra_name="Cash0", extra_args=["--rerolls-with-cash=0"]),
+                compare(args, tiers_sims[tier], tier, "modules", level),
+            ]
 
     yield from [cli for cli in commands if cli is not None]
 
