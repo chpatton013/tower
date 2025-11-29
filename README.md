@@ -117,181 +117,349 @@ each option is `locked` if not specified.
   --reward=coins --freeup-chance 89.76 91.46 89.7 --bhd=10 --golden-combo=0.15
 ```
 
-## Results summary
-
-> tl;dr: RPC#, Cash#, EB#, and EO#; followed by WS# and WA#
+## Results Analysis
 
 To determine which mastery has the best impact on your economy per stone spent,
-you have to compare each reward you care about farming under the different
-configurations you can farm. We'll summarize results found for a T11 W10000 run
-and a T14 W3500 run, then compare T11-T14 runs to each other with varying
-mastery levels.
+you have to simulate farming runs under the different configurations you can
+farm, and then compare their results. We'll look at configurations with
+different mastery levels and run lengths since those seem to be the most
+impactful variables on relative performance.
 
-### T11
+In our simulations we'll make the assumption that orbs are hitting 100% of
+enemies except for scatter children. For an eHP blender build, that's not too
+far from reality. However, even if you don't agree with that, you'll see from
+the graphs that the orb hit ratio would have to be closer to 50% for Coin# to
+even match the benefit of EO#.
 
-Simulated configuration
-- T11 W10k
-- Relative comparison of all masteries
-- Normalized against elapsed time
-- Assume orbs hit all enemies
+### Summary (tl;dr)
 
-Results when normalized by mastery stone cost
-- Coins:
-  - Level 0: EO# >> WS# >= WA# >= Coin# >> CritCoin# >= IS#
-  - Level 2: EO# >> Coin# >= WA# >= WS# > IS# >= CritCoin#
-  - Level 9: EO# >> Coin# > WS# >= WA# > IS# >= CritCoin#
-- Elite cells:
-  - Level 0: EB# > WS# > IS#
-  - Level 2: EB# > WS# >= IS#
-  - Level 9: EB# > IS# >= WS#
-- Reroll shards:
-  - If you assume you already have Cash#0:
-    - Level 0: WS# > EB# > IS#
-    - Level 2: Cash# > WS# > EB# > IS#
-  - If you don't assume Cash#0:
-    - Level 2: Cash# > WS# > Baseline >= IS#
-- Module shards:
-  - Level 0: RPC# >> WS# > Baseline >= IS#
+So which mastery is best? As with all interesting topics, it depends.
 
-Figures
-- [relative coins per hour from all masteries at level 0](./figures/compare-coins-T11W10000-L0-rel-dt.png)
-- [relative coins per hour per stone from all masteries at level 0](./figures/compare-coins-T11W10000-L0-rel-roi-dt.png)
-- [relative coins per hour from all masteries at level 2](./figures/compare-coins-T11W10000-L2-rel-dt.png)
-- [relative coins per hour per stone from all masteries at level 2](./figures/compare-coins-T11W10000-L2-rel-roi-dt.png)
-- [relative coins per hour from all masteries at level 9](./figures/compare-coins-T11W10000-L9-rel-dt.png)
-- [relative coins per hour per stone from all masteries at level 9](./figures/compare-coins-T11W10000-L9-rel-roi-dt.png)
-- [relative cells per hour from all masteries at level 0](./figures/compare-cells-T11W10000-L0-rel-dt.png)
-- [relative cells per hour from all masteries at level 2](./figures/compare-cells-T11W10000-L2-rel-dt.png)
-- [relative cells per hour from all masteries at level 9](./figures/compare-cells-T11W10000-L9-rel-dt.png)
-- [relative modules per hour from all masteries at level 0](./figures/compare-modules-T11W10000-L0-rel-dt.png)
-- [relative rerolls per hour from all masteries at level 0](./figures/compare-rerolls-T11W10000-L0-rel-dt.png)
-- [relative rerolls per hour from all masteries at level 0 with Cash# at level 0](./figures/compare-rerolls-T11W10000-L0-rel-Cash0-dt.png)
-- [relative rerolls per hour from all masteries at level 2 with Cash# at level 0](./figures/compare-rerolls-T11W10000-L2-rel-Cash0-dt.png)
+#### Modules and Rerolls
 
-### T14
+This answer is simple: RPC# and Cash#, respectively.
 
-Simulated configuration
-- T14 W3.5k
-- Relative comparison of all masteries
-- Normalized against elapsed time
-- Assume orbs hit all enemies
+#### Cells
 
-Results when normalized by mastery stone cost
-- Coins:
-  - Level 0: EO# >> WA# > WS# > Coin# >> IS# >= CritCoin#
-  - Level 2: EO# >> WA# >> Coin# >= IS# > WS# > CritCoin#
-  - Level 9: EO# >> WA# > Coin# > IS# >= WS# > CritCoin#
-- Elite cells:
-  - Level 0: EB# > WS# = IS#
-  - Level 2: IS# > EB# > WS#
-  - Level 9: IS# >> EB# > WS#
-- Reroll shards: same as T11
-- Module shards: same as T11
+This answer depends on run length: IS# when under 7000 waves, and EB#
+when over.
 
-Figures
-- [relative coins per hour from all masteries at level 0](./figures/compare-coins-T14W3500-L0-rel-dt.png)
-- [relative coins per hour per stone from all masteries at level 0](./figures/compare-coins-T14W3500-L0-rel-roi-dt.png)
-- [relative coins per hour from all masteries at level 2](./figures/compare-coins-T14W3500-L2-rel-dt.png)
-- [relative coins per hour per stone from all masteries at level 2](./figures/compare-coins-T14W3500-L2-rel-roi-dt.png)
-- [relative coins per hour from all masteries at level 9](./figures/compare-coins-T14W3500-L9-rel-dt.png)
-- [relative coins per hour per stone from all masteries at level 9](./figures/compare-coins-T14W3500-L9-rel-roi-dt.png)
-- [relative cells per hour from all masteries at level 0](./figures/compare-cells-T14W3500-L0-rel-dt.png)
-- [relative cells per hour from all masteries at level 2](./figures/compare-cells-T14W3500-L2-rel-dt.png)
-- [relative cells per hour from all masteries at level 9](./figures/compare-cells-T14W3500-L9-rel-dt.png)
-- [relative modules per hour from all masteries at level 0](./figures/compare-modules-T14W3500-L0-rel-dt.png)
-- [relative rerolls per hour from all masteries at level 0](./figures/compare-rerolls-T14W3500-L0-rel-dt.png)
-- [relative rerolls per hour from all masteries at level 0 with Cash# at level 0](./figures/compare-rerolls-T14W3500-L0-rel-Cash0-dt.png)
-- [relative rerolls per hour from all masteries at level 2 with Cash# at level 0](./figures/compare-rerolls-T14W3500-L2-rel-Cash0-dt.png)
+#### Coins
 
-### Comparing across tiers
+This answer depends on multiple variables.
 
-Configuration
-- Relative comparison of all difficulties
-  - Assume my own farm stats: T11W10000, T12W6000, T13W5000, T14W3500
-- Varying WA#, Cash#, and EB#
-- Normalized against elapsed time
-- Assume orbs hit all enemies
+Variables:
+1. How many mastery lab levels you can afford
+2. Long or short run length (over or under 4000 waves)
+3. BHD equipped
+4. GT+ unlocked
 
-Results:
-- Coins:
-  - WA# at level 0:
-    - T12: Same as T11
-    - T13: +11% from T11
-    - T14: +16% from T11
-  - WA# at level 2:
-    - T12: +3% from T11
-    - T13: +15% from T11
-    - T14: +20% from T11
-  - WA# at level 9:
-    - T12: +9% from T11
-    - T13: +26% from T11
-    - T14: +33% from T11
-- Cells:
-  - T12: -19% from T11
-  - T13: -20% from T11
-  - T14: -9% from T11
-- Rerolls:
-  - Cash# and EB# at level 0:
-    - T12: +8% from T11
-    - T13: +20% from T11
-    - T14: +40% from T11
-  - Cash# and EB# at level 9:
-    - T12: -7% from T11
-    - T13: -2% from T11
-    - T14: -4% from T11
-- Modules: No variance
+Answers:
+- If you can't afford any lab levels or do long farm runs, EO# wins
+- If you do short farm runs, IS# wins
+- If you use BHD, WS# gets a minor upgrade
+- If you use GT+ and do short farm runs, WA# gets a major upgrade
 
-Figures
-- [coins between T11-T14 with WA# at level 0](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA0-dt.png)
-- [coins between T11-T14 with WA# at level 2](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA2-dt.png)
-- [coins between T11-T14 with WA# at level 9](./figures/tiers-coins-T11W10000-T12W6000-T13W5000-T14W3500-WA9-dt.png)
-- [cells between T11-T14](./figures/tiers-cells-T11W10000-T12W6000-T13W5000-T14W3500-dt.png)
-- [rerolls between T11-T14 with Cash# at level 0](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash0-EB0-dt.png)
-- [rerolls between T11-T14 with Cash# at level 9](./figures/tiers-rerolls-T11W10000-T12W6000-T13W5000-T14W3500-Cash9-EB9-dt.png)
+#### Qualitative Properties
 
-### Analysis
+RPC# is the only mechanism currently available to shorten the multi-year module
+grind. You need an insane number of shards to unlock sub-effect slots
+(especially now with assist-mods) that it's difficult to think about RPC# as an
+econ mastery, and more of a time-machine mastery.
 
-Coins
-- EO# provides the best ROI in both T11 and T14.
-  - The performance of EO# is based on the assumption that orbs hit 100% of all
-    enemies. You're probably getting 80% orb kills, and that sets our worst-case
-    minimum value for orb hits. The results show that EO# has twice the ROI as
-    the runner-up, so anything more than 50% orb hits will leave us with EO# as
-    the best ROI.
-- Coin# is the next strongest choice in T11
-- WA# is the next strongest choice in T14
-- T14 makes 15% more coins than T11 even without any new masteries.
+Likewise, IS# has such a drastic quality of life impact that you may want to
+treat it as a completely separate type of mastery and not bother comparing it to
+the econ masteries. With IS# you can:
+- complete your 3-hour long tournaments will run in 20-30 minutes
+- try 6 different tourney builds in an evening
+- stop trying to prevent premature kills in early waves
+- farm higher tiers in less time
 
-Cells
-- EB# is the strongest choice in T11
-- IS# is the strongest choice in T14
-- T14 makes 9% fewer cells than T11 without any new masteries.
-  - However, T11 EB#2 makes only 5% more cells than T14 IS#2
+#### Recommended Unlock Order
 
-Rerolls
-- Cash# significantly outperforms every other mastery.
-- T14 makes anywhere between "significantly more" and "barely fewer" rerolls
-  than T11 depending on levels of Cash# and EB#. This is really just T11
-  catching up to T14, though.
+- Long farm runs:
+    - No GT+: RPC#, Cash#, EO#, Coin#, EB#, WS#, WA#, IS#
+    - With GT+: RPC#, Cash#, EO#, WA#, EB#, Coin#, WS#, IS#
+- Short farm runs:
+    - Low income: RPC#, Cash#, IS#, WS#, WA#, EO#, Coin#, EB#
+    - High income:
+        - No GT+: RPC#, Cash#, IS#, EO#, WS#, WA#, Coin#, EB#
+        - With GT+: RPC#, Cash#, IS#, WA#, EO#, WS#, Coin#, EB#
 
-Modules
-- RPC# is so far and away better than everything else that it's not worth
-  comparing it to anything.
-- There is no variance in module income across tiers.
+I weigh modules higher than coins, so I rank RPC# and Cash# highest. I also
+weigh cells highly, so I promote EB# above several masteries with greater coin
+benefits for long runs (where EB# outperforms IS#).
 
-If you could only pick four, RPC#, Cash#, EB#, and EO# are each best in their
-respective classes for T11. IS# replaces EB# for T14. WS# and WA# share the
-honorable mention slot for their versatility.
+### Mastery Comparison
 
-T14 should greatly outperform T11 for coins and rerolls, and moderately
-underperform for cells. The cell gap can be closed with IS#.
+We'll concentrate our comparative analysis on two different configurations: a
+T11 W10000 run, and a T14 W4000 run. Within each configuration, we'll simulate
+without any masteries, and then with each mastery individually. We'll do that
+for levels 0, 4, and 9 to get a picture of how the effect of a mastery changes
+as you level it.
+
+These simulation results will be normalized both by the baseline no-mastery
+simulation and the total elapsed time. We can compare those to the same results
+normalized once more by stone cost.
+
+> Note that these normalization processes will leave the baseline simulation
+> as a flat line (along with any other masteries that have no effect for the
+> reward being graphed); while masteries that accelerate certain events will
+> appear to have sharp, jagged increases (as they pull farther ahead of the
+> baseline) followed by gradual, asymptotic decreases (as the baseline catches
+> back up).
+
+#### Cells
+
+Cells are the simplest reward to analyze, so we'll start here.
+
+We see very different stories emerging as we compare T11 and T14 results for
+cell rewards. In T11 IS# starts on the bottom at level 0 and climbs its way
+right between EB# and WS# after a few levels. In T14, IS# begins with a slight
+lead over WS#, and proceeds to drastically overtake EB# and WS#.
+
+However, if we only consider the first half of the T11 graph (40%, actually),
+then we see the same relationships as the T14 graph. This difference between our
+simulations has nothing to do with the tier, and everything to do with the run
+duration. This is a good reminder that our T14 simulation is less than half the
+duration of our T11 simulation, which will be the primary differentiator in our
+conclusions for each section.
+
+It's also worth pointing out that IS#'s difference between level 0 and 4 is due
+to the baseline having a 100 wave sprint duration. While level 0 only increases
+that by 80 waves, every level above increases it by 180 waves.
+
+| | Level 0 | Level 4 | Level 9 |
+|-|-|-|-|
+| Tier 11 | ![](./figures/compare-cells-T11W10000-L0-rel-dt.png) | ![](./figures/compare-cells-T11W10000-L4-rel-dt.png) | ![](./figures/compare-cells-T11W10000-L9-rel-dt.png) |
+| Tier 14 | ![](./figures/compare-cells-T14W4000-L0-rel-dt.png) | ![](./figures/compare-cells-T14W4000-L4-rel-dt.png) | ![](./figures/compare-cells-T14W4000-L9-rel-dt.png) |
+
+##### Conclusions
+
+* < 7000 waves: IS# >> EB# > WS#
+* \> 7000 waves: EB# > IS# > WS#
+
+#### Modules
+
+Modules are only slightly more complicated than cells because of their
+interaction with fleets.
+
+By looking at the figures for each simulation, we can see that RPC# steals the
+show. It may be hard to tell, but WS# and IS# are here too. All effects scale
+nearly linearly with their level. No other masteries have any impact.
+
+The impact of each mastery is consistent across T11 and T14, save for some blips
+you'll see caused by fleets. WS# and IS# get you to fleet spawns sooner, which
+gives you a temporary increase over baseline. RPC# loses a tiny bit of its
+dramatic lead over baseline any time a fleet spawns.
+
+| | Level 0 | Level 4 | Level 9 |
+|-|-|-|-|
+| Tier 11 | ![](./figures/compare-modules-T11W10000-L0-rel-dt.png) | ![](./figures/compare-modules-T11W10000-L4-rel-dt.png) | ![](./figures/compare-modules-T11W10000-L9-rel-dt.png) |
+| Tier 14 | ![](./figures/compare-modules-T14W4000-L0-rel-dt.png) | ![](./figures/compare-modules-T14W4000-L4-rel-dt.png) | ![](./figures/compare-modules-T14W4000-L9-rel-dt.png) |
+
+##### Conclusions
+
+RPC#
+
+#### Rerolls
+
+Rerolls add another layer of complexity because of the synergy between Cash# and
+the masteries that affect elite spawn rates (EB#, WS#, and IS#).
+
+It's worth comparing the effect that each mastery has in isolation to show why
+Cash# is so necessary. Conversely, it's not very helpful to view the effect of
+the other masteries without a base assumption of Cash# at least being unlocked
+at level 0.
+
+Our T14 simulation exhibits interesting jagged lines that correspond to fleet
+spawns. IS# and WS# get you to the fleet's wave sooner, and give you a temporary
+lead over the baseline. This corrects after the baseline reaches that same wave,
+and would have in our graphs if our simulation didn't end just before that wave.
+
+However, Cash# has a persistent dip in its relative performance at these fleet
+spawning waves because the baseline also gets them at the same time. Since the
+fleet reward is so significant, adding it to both simulations noticeably closes
+the gap (especially in shorter runs).
+
+| | Level 0 | Level 4 | Level 9 |
+|-|-|-|-|
+| Tier 11 (no Cash#) | ![](./figures/compare-rerolls-T11W10000-L0-rel-dt.png) | ![](./figures/compare-rerolls-T11W10000-L4-rel-dt.png) | ![](./figures/compare-rerolls-T11W10000-L9-rel-dt.png) |
+| Tier 11 (Cash#0) | ![](./figures/compare-rerolls-T11W10000-L0-rel-Cash0-dt.png) | ![](./figures/compare-rerolls-T11W10000-L4-rel-Cash0-dt.png) | ![](./figures/compare-rerolls-T11W10000-L9-rel-Cash0-dt.png) |
+| Tier 14 (no Cash#) | ![](./figures/compare-rerolls-T14W4000-L0-rel-dt.png) | ![](./figures/compare-rerolls-T14W4000-L4-rel-dt.png) | ![](./figures/compare-rerolls-T14W4000-L9-rel-dt.png) |
+| Tier 14 (Cash#0) | ![](./figures/compare-rerolls-T14W4000-L0-rel-Cash0-dt.png) | ![](./figures/compare-rerolls-T14W4000-L4-rel-Cash0-dt.png) | ![](./figures/compare-rerolls-T14W4000-L9-rel-Cash0-dt.png) |
+
+##### Conclusions
+
+* < 7000 waves: Cash# >> WS# >= IS# >= EB#
+* \> 7000 waves: Cash# >> WS# >= EB# >= IS#
+
+#### Coins
+
+Coins are the complicated case, so strap in. There are seven different masteries
+that impact coin income, and some of them have interactions with BHD and GT+
+that are significant enough to dive into separately.
+
+The first thing we have to address is how IS# skews the graphs. IS# is the clear
+overachiever of the group. Though notably its advantages fall away rapidly after
+about 3000 waves. To make the relationships between the other masteries more
+visible, we've included graph variants without IS#.
+
+In addition to IS#, run length has a serious impact on the performance of WA#
+and WS#, and a minor impact on EO#, EB#, and CritCoin#. WA# and WS# both lose
+their early advantages around 3000 waves. WA# and IS# continue to degrade
+rapidly, while EO#, WS#, and CritCoin# all degrade slowly. EB#, conversely,
+improves rapidly up until 3000 waves, then slowly after.
+
+While mastery level doesn't have an apparent relative impact on EO#, Coin#, EB#,
+and CritCoin#, there is a significant difference between level 0 and 4 for IS#,
+WA#, and WS#. WA# and WS# degrade compared to the others, while IS# improves.
+However, there's virtually no difference for any mastery between levels 4 and 9.
+
+There's a big asterisk on EO#, which is that it won't perform as well for high
+damage builds since enemies often get killed before they reach the orb line. If
+you farm a basic eHP blender, then you should still see the calculated benefit.
+
+| | Level 0 | Level 4 | Level 9 |
+|-|-|-|-|
+| T11 | ![](./figures/compare-coins-T11W10000-L0-rel-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L4-rel-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-roi-dt.png) |
+| T11 (no IS#) | ![](./figures/compare-coins-T11W10000-L0-rel-roi-noIS-dt.png) | ![](./figures/compare-coins-T11W10000-L4-rel-roi-noIS-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-roi-noIS-dt.png) |
+| T14 | ![](./figures/compare-coins-T14W4000-L0-rel-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L4-rel-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-roi-dt.png) |
+| T14 (no IS#) | ![](./figures/compare-coins-T14W4000-L0-rel-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L4-rel-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-roi-noIS-dt.png) |
+
+##### BHD
+
+BHD amplifies the benefit of WS# because free upgrade quantities are accumulated
+during wave skips. This benefit increases with mastery level, and remains
+consistent in the face of changing run length.
+
+We can also observe that BDH has some impact on IS# when we assess high mastery
+levels. BHD affects IS# because IS# increases the impact of any coin multiplier
+increase by accelerating the spawn rate. This impact becomes significant during
+short runs.
+
+| | None (0%) | Epic (3%) | Legendary (5%) | Mythic (7%) | Ancestral (10%) |
+|-|-|-|-|-|-|
+| T11 L2 | ![](./figures/compare-coins-T11W10000-L2-rel-bhd0-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-bhd3-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-bhd5-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-bhd7-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-bhd10-roi-dt.png) |
+| T11 L9 | ![](./figures/compare-coins-T11W10000-L9-rel-bhd0-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-bhd3-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-bhd5-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-bhd7-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-bhd10-roi-dt.png) |
+| T14 L2 | ![](./figures/compare-coins-T14W4000-L2-rel-bhd0-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd3-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd5-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd10-roi-dt.png) |
+| T14 L2 (no IS#) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd0-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd3-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd5-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd10-roi-noIS-dt.png) |
+| T14 L9 | ![](./figures/compare-coins-T14W4000-L9-rel-bhd0-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd3-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd5-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd10-roi-dt.png) |
+| T14 L9 (no IS#) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd0-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd3-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd5-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd10-roi-noIS-dt.png) |
+
+##### Golden Combo (GT+)
+
+GT+ amplifies the benefit of EB#, IS#, WA#, and WS#; but diminishes the relative
+benefit of CritCoin# and EO#. Both the positive and negative effects grow as a
+function of mastery level and run length.
+
+GT+ has a fairly consistent effect on IS# and WS# across tiers and mastery
+levels. It has a major effect on EB# and WA#, though with opposite affinities
+for run length. We've omitted IS# from the T14 graphs because GT+'s impact is so
+minor compared to others, and IS# skews the graphs.
+
+| | 0.00% | 0.15% | 0.30% | 0.45% |
+|-|-|-|-|-|
+| T11 L2 | ![](./figures/compare-coins-T11W10000-L2-rel-gt000-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-gt015-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-gt030-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-gt045-roi-dt.png) |
+| T11 L9 | ![](./figures/compare-coins-T11W10000-L9-rel-gt000-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-gt015-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-gt030-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-gt045-roi-dt.png) |
+| T14 L2 (no IS#) | ![](./figures/compare-coins-T14W4000-L2-rel-gt000-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-gt015-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-gt030-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-gt045-roi-noIS-dt.png) |
+| T14 L9 (no IS#) | ![](./figures/compare-coins-T14W4000-L9-rel-gt000-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-gt015-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-gt030-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-gt045-roi-noIS-dt.png) |
+
+##### BHD with GT+
+
+BHD and GT+ each make significant changes to several masteries, but synergize to
+greatly amplify WS# when used together. These graphs give you an idea of exactly
+how impactful that synergy is relative to the improvements they make to those
+other masteries. Once again, we include graph variants without IS#.
+
+| BHD 7% | GT+ 0.00% | GT+ 0.15% | GT+ 0.30% | GT+ 0.45% |
+|-|-|-|-|-|
+| T11 L2 | ![](./figures/compare-coins-T11W10000-L2-rel-bhd7-gt000-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-bhd7-gt015-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-bhd7-gt030-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L2-rel-bhd7-gt045-roi-dt.png) |
+| T11 L9 | ![](./figures/compare-coins-T11W10000-L9-rel-bhd7-gt000-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-bhd7-gt015-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-bhd7-gt030-roi-dt.png) | ![](./figures/compare-coins-T11W10000-L9-rel-bhd7-gt045-roi-dt.png) |
+| T14 L2 | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt000-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt015-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt030-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt045-roi-dt.png) |
+| T14 L2 (no IS#) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt000-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt015-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt030-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L2-rel-bhd7-gt045-roi-noIS-dt.png) |
+| T14 L9 | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt000-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt015-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt030-roi-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt045-roi-dt.png) |
+| T14 L9 (no IS#) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt000-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt015-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt030-roi-noIS-dt.png) | ![](./figures/compare-coins-T14W4000-L9-rel-bhd7-gt045-roi-noIS-dt.png) |
+
+##### Conclusions
+
+Since there is so much nuance to how our variables affect each mastery, we don't
+have a simple conclusion based on run length. Instead, we have a decision tree
+based on the following questions:
+1. How many mastery lab levels can you afford if you saved coins for a week?
+    - None at all (L0)
+    - A couple levels (L2)
+    - All the levels (L9)
+2. Are your farm runs short or long (<4000 waves)?
+    - Short
+    - Long
+3. Do you have BHD? (y/n)
+4. Do you have GT+? (y/n)
+
+Fortunately, something we can all agree on is that CritCoin# is always the worst
+choice, so I'll be omitting if from the table below.
+
+| 1 | 2 | 3 | 4 | |
+|-|-|-|-|-|
+| L0 | * | * | No GT+ | EO# > WS# > [Coin# = WA#] > [IS# = EB#] |
+| L0 | * | * | Yes GT+ | EO# > [WS# = WA#] > Coin# > IS# > EB# |
+| L2 | Long | * | No GT+ | EO# > [Coin# = IS# = WS#] > WA# > EB# |
+| L2 | Long | No BHD | Yes GT+ | EO# > WA# > [Coin# = IS# = WS#] > EB# |
+| L2 | Long | Yes BHD | Yes GT+ | EO# > WA# > WS# > [Coin# = IS#] > EB# |
+| L2 | Short | No BHD | No GT+ | IS# >> EO# > [WS# = WA#] > Coin# > EB# |
+| L2 | Short | Yes BHD | No GT+ | IS# >> EO# > WS# > WA# > Coin# > EB# |
+| L2 | Short | * | Yes GT+ | IS# >> WA# > EO# > WS# > Coin# > EB# |
+| L9 | Long | No BHD | No GT+ | EO# > [IS# = Coin#] > WS# > [WA# = EB#] |
+| L9 | Long | No BHD | Yes GT+ | EO# > IS# > [Coin# = WS#] > [WA# = EB#] |
+| L9 | Long | Yes BHD | No GT+ | EO# > [IS# = Coin# = WS#] > [WA# = EB#] |
+| L9 | Long | Yes BHD | Yes GT+ | EO# > IS# > WS# > Coin# > [WA# = EB#] |
+| L9 | Short | No BHD | No GT+ | IS# > EO# > [WS# = WA#] > Coin# > EB# |
+| L9 | Short | No BHD | Yes GT+ | IS# > WA# > EO# > WS# > Coin# > EB# |
+| L9 | Short | Yes BHD | No GT+ | IS# >> EO# > WS# > WA# > Coin# > EB# |
+| L9 | Short | Yes BHD | Yes GT+ | IS# >> WA# > [EO# = WS#] > Coin# > EB# |
+
+To try to summarize:
+- If you can't afford any lab levels or do long farm runs, EO# wins
+- If you do short farm runs, IS# wins
+- If you use BHD, WS# gets a minor upgrade
+- If you use GT+ and do short farm runs, WA# gets a major upgrade
+
+### Tier Comparison
+
+To determine if certain mastery combos make higher-tier farming more viable,
+we'll compare runs across T11-T14 to each other with varying mastery levels.
+T11 is simulated for 10000 waves, and each higher wave is 2000 waves shorter
+than the previous. For each reward, we'll compare simulations with no masteries,
+with masteries at level 0, and then at level 9.
+
+Simply unlocking masteries is not going to make higher-tier farming any more
+viable than it already is, as evidenced by the near-identical graphs in the
+Locked and Level 0 columns. However, by level 9, the synergizing mastery combos
+have more than compensated for the shorter runs. This makes higher-tier farming
+not only viable, but preferred.
+
+The notable exception to this pattern is module farming, which is so completely
+dominated by RPC# that there's essentially no benefit gained from higher tiers
+if farming runs are at all shortened.
+
+| | Locked | Level 0 | Level 9 |
+|-|-|-|-|
+| Coins | ![](./figures/tiers-coins-T11W10000-T12W8000-T13W6000-T14W4000-dt.png) | ![](./figures/tiers-coins-T11W10000-T12W8000-T13W6000-T14W4000-IS0-WA0-dt.png) | ![](./figures/tiers-coins-T11W10000-T12W8000-T13W6000-T14W4000-IS9-WA9-dt.png) |
+| Cells | ![](./figures/tiers-cells-T11W10000-T12W8000-T13W6000-T14W4000-dt.png) | ![](./figures/tiers-cells-T11W10000-T12W8000-T13W6000-T14W4000-IS0-EB0-dt.png) | ![](./figures/tiers-cells-T11W10000-T12W8000-T13W6000-T14W4000-IS9-EB9-dt.png) |
+| Rerolls | ![](./figures/tiers-rerolls-T11W10000-T12W8000-T13W6000-T14W4000-dt.png) | ![](./figures/tiers-rerolls-T11W10000-T12W8000-T13W6000-T14W4000-Cash0-EB0-dt.png) | ![](./figures/tiers-rerolls-T11W10000-T12W8000-T13W6000-T14W4000-Cash9-EB9-dt.png) |
+| Modules | ![](./figures/tiers-modules-T11W10000-T12W8000-T13W6000-T14W4000-dt.png) | ![](./figures/tiers-modules-T11W10000-T12W8000-T13W6000-T14W4000-IS0-RPC0-dt.png) | ![](./figures/tiers-modules-T11W10000-T12W8000-T13W6000-T14W4000-IS9-RPC9-dt.png) |
+
+##### Conclusions
+
+IS#, WA#, Cash#, and EB# synergize to make higher-tier farming viable at about
+mastery level 4.
 
 ## Estimation methodology
 
 Runs are simulated sequences of waves, emitting events as probabilities. Rewards
 are calculated each wave by multiplying the event probabilities to the results
 of encountering each event. Rewards are accumulated over the run and tracked as
-cumulative values per-wave.
+cumulative values per-wave. The results can be thought of as numerical integrals.
 
 Results for different simulation configurations can
 be directly compared and plotted against each other, either as absolute values,
