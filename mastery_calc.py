@@ -562,7 +562,7 @@ def add_common_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--freeup-chance",
         nargs=3,
-        type=int,
+        type=float,
         default=[75, 75, 75],
         help="Free-upgrade chances (attack %%, defense %%, utility %%)",
     )
