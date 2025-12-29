@@ -86,7 +86,7 @@ Mastery levels
 [ --extra-orb=EXTRA_ORB_MASTERY_LEVEL ]
 [ --intro-sprint=INTRO_SPRINT_MASTERY_LEVEL ]
 [ --recovery-package=RECOVERY_PACKAGE_MASTERY_LEVEL ]
-[ --wake-skip=WAVE_SKIP_MASTERY_LEVEL ]
+[ --wave-skip=WAVE_SKIP_MASTERY_LEVEL ]
 [ --wave-accelerator=WAVE_ACCELERATOR_MASTERY_LEVEL ]
 ```
 Each mastery level accepts the values `locked`, or `0` through `9`. By default,
