@@ -1,0 +1,48 @@
+Optimal ILM w/ CJ=5 upgrade path:
+  upgrd    damage   (increase)     cost          (roi)        total cost 
+  ----- ----------- ---------- ----------- ----------------- ------------
+  ILM+ 0    54675.0x (+18125.000%)  750 stones (24.166667%/stone)   750 stones
+  ILMd 1    60142.5x (+10.000%)    5 stones (2.000000%/stone)   755 stones
+  ILMd 2    71077.5x (+18.182%)   11 stones (1.652893%/stone)   766 stones
+  ILMd 3    87480.0x (+23.077%)   17 stones (1.357466%/stone)   783 stones
+  ILMd 4   109350.0x (+25.000%)   23 stones (1.086957%/stone)   806 stones
+  ILMd 5   142155.0x (+30.000%)   29 stones (1.034483%/stone)   835 stones
+  ILMd 6   185895.0x (+30.769%)   35 stones (0.879121%/stone)   870 stones
+  ILM+ 1   555645.0x (+198.903%)  300 stones (0.663009%/stone)  1170 stones
+  ILMd 7   702727.5x (+26.471%)   41 stones (0.645624%/stone)  1211 stones
+  ILMd 8   898837.5x (+27.907%)   47 stones (0.593765%/stone)  1258 stones
+  ILMd 9  1127632.5x (+25.455%)   53 stones (0.480274%/stone)  1311 stones
+  ILMd10  1421797.5x (+26.087%)   61 stones (0.427655%/stone)  1372 stones
+  ILMd11  1764990.0x (+24.138%)   71 stones (0.339971%/stone)  1443 stones
+  ILMd12  2189895.0x (+24.074%)   84 stones (0.286596%/stone)  1527 stones
+  ILM+ 2  4230045.0x (+93.162%)  360 stones (0.258783%/stone)  1887 stones
+  ILMd13  5177070.0x (+22.388%)  100 stones (0.223881%/stone)  1987 stones
+  ILMd14  6313500.0x (+21.951%)  120 stones (0.182927%/stone)  2107 stones
+  ILMd15  7670902.5x (+21.500%)  144 stones (0.149306%/stone)  2251 stones
+  ILM+ 3 12427627.5x (+62.010%)  430 stones (0.144209%/stone)  2681 stones
+  ILMd16 14984752.5x (+20.576%)  174 stones (0.118254%/stone)  2855 stones
+  ILMd17 18002160.0x (+20.137%)  210 stones (0.095888%/stone)  3065 stones
+  ILM+ 4 26423760.0x (+46.781%)  510 stones (0.091728%/stone)  3575 stones
+  ILMd18 31603417.5x (+19.602%)  254 stones (0.077174%/stone)  3829 stones
+  ILMd19 37683885.0x (+19.240%)  308 stones (0.062467%/stone)  4137 stones
+  ILM+ 5 51877935.0x (+37.666%)  620 stones (0.060752%/stone)  4757 stones
+  ILMd20 61695472.5x (+18.924%)  374 stones (0.050600%/stone)  5131 stones
+  ILM+ 6 81172597.5x (+31.570%)  750 stones (0.042093%/stone)  5881 stones
+  ILMd21 96264990.0x (+18.593%)  454 stones (0.040954%/stone)  6335 stones
+  ILMd22 113940765.0x (+18.362%)  540 stones (0.034003%/stone)  6875 stones
+  ILM+ 7 144925815.0x (+27.194%)  900 stones (0.030216%/stone)  7775 stones
+  ILMd23 171040132.5x (+18.019%)  632 stones (0.028511%/stone)  8407 stones
+  ILMd24 201478012.5x (+17.796%)  730 stones (0.024378%/stone)  9137 stones
+  ILM+ 8 249621637.5x (+23.895%) 1100 stones (0.021723%/stone) 10237 stones
+  ILMd25 293546475.0x (+17.597%)  834 stones (0.021099%/stone) 11071 stones
+  ILMd26 344542140.0x (+17.372%)  944 stones (0.018403%/stone) 12015 stones
+  ILMd27 404108505.0x (+17.289%) 1060 stones (0.016310%/stone) 13075 stones
+  ILM+ 9 490251555.0x (+21.317%) 1350 stones (0.015790%/stone) 14425 stones
+  ILMd28 574212982.5x (+17.126%) 1182 stones (0.014489%/stone) 15607 stones
+  ILMd29 671951362.5x (+17.021%) 1312 stones (0.012974%/stone) 16919 stones
+  ILM+10 801265987.5x (+19.245%) 1650 stones (0.011663%/stone) 18569 stones
+  ILMd30 936411817.5x (+16.867%) 1448 stones (0.011648%/stone) 20017 stones
+  ILM+11 1100678692.5x (+17.542%) 2050 stones (0.008557%/stone) 22067 stones
+  ILM+12 1278086917.5x (+16.118%) 2600 stones (0.006199%/stone) 24667 stones
+  ILM+13 1468636492.5x (+14.909%) 3300 stones (0.004518%/stone) 27967 stones
+  ILM+14 1672327417.5x (+13.869%) 4150 stones (0.003342%/stone) 32117 stones

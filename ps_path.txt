@@ -1,0 +1,47 @@
+upgrd    damage   (increase)     cost          (roi)        total cost
+----- ----------- ---------- ----------- ----------------- ------------
+PSd 1     7188.5x (+10.000%)    5 stones (2.000000%/stone)     5 stones
+PSd 2     8495.5x (+18.182%)   11 stones (1.652893%/stone)    16 stones
+PSd 3    10456.0x (+23.077%)   17 stones (1.357466%/stone)    33 stones
+PSd 4    13070.0x (+25.000%)   23 stones (1.086957%/stone)    56 stones
+PSd 5    16991.0x (+30.000%)   29 stones (1.034483%/stone)    85 stones
+PSd 6    22219.0x (+30.769%)   35 stones (0.879121%/stone)   120 stones
+PSd 7    28100.5x (+26.471%)   41 stones (0.645624%/stone)   161 stones
+PSd 8    35942.5x (+27.907%)   47 stones (0.593765%/stone)   208 stones
+PSd 9    45091.5x (+25.455%)   53 stones (0.480274%/stone)   261 stones
+PSd10    56854.5x (+26.087%)   61 stones (0.427655%/stone)   322 stones
+PSd11    70578.0x (+24.138%)   71 stones (0.339971%/stone)   393 stones
+PSd12    87569.0x (+24.074%)   84 stones (0.286596%/stone)   477 stones
+PSd13   107174.0x (+22.388%)  100 stones (0.223881%/stone)   577 stones
+PSd14   130700.0x (+21.951%)  120 stones (0.182927%/stone)   697 stones
+PSd15   158800.5x (+21.500%)  144 stones (0.149306%/stone)   841 stones
+PSd16   191475.5x (+20.576%)  174 stones (0.118254%/stone)  1015 stones
+PS+ 0   280694.0x (+46.595%)  750 stones (0.062127%/stone)  1765 stones
+PS+ 1   369912.5x (+31.785%)  300 stones (0.105950%/stone)  2065 stones
+PS+ 2   459131.0x (+24.119%)  360 stones (0.066997%/stone)  2425 stones
+PS+ 3   548349.5x (+19.432%)  430 stones (0.045191%/stone)  2855 stones
+PSd17   658768.0x (+20.137%)  210 stones (0.095888%/stone)  3065 stones
+PSd18   787901.5x (+19.602%)  252 stones (0.077787%/stone)  3317 stones
+PSd19   939493.0x (+19.240%)  302 stones (0.063708%/stone)  3619 stones
+PSd20  1117285.5x (+18.924%)  362 stones (0.052277%/stone)  3981 stones
+PSd21  1325022.0x (+18.593%)  434 stones (0.042841%/stone)  4415 stones
+PSd22  1568317.0x (+18.362%)  525 stones (0.034974%/stone)  4940 stones
+PS+ 4  1823488.0x (+16.270%)  510 stones (0.031903%/stone)  5450 stones
+PSd23  2152064.0x (+18.019%)  636 stones (0.028332%/stone)  6086 stones
+PSd24  2535040.0x (+17.796%)  772 stones (0.023051%/stone)  6858 stones
+PS+ 5  2889782.5x (+13.994%)  620 stones (0.022570%/stone)  7478 stones
+PSd25  3398285.0x (+17.597%)  938 stones (0.018760%/stone)  8416 stones
+PS+ 6  3815450.0x (+12.276%)  750 stones (0.016368%/stone)  9166 stones
+PSd26  4478280.0x (+17.372%) 1134 stones (0.015319%/stone) 10300 stones
+PSd27  5252510.0x (+17.289%) 1360 stones (0.012712%/stone) 11660 stones
+PS+ 7  5826797.0x (+10.934%)  900 stones (0.012148%/stone) 12560 stones
+PSd28  6824705.5x (+17.126%) 1616 stones (0.010598%/stone) 14176 stones
+PS+ 8  7497346.0x ( +9.856%) 1100 stones (0.008960%/stone) 15276 stones
+PSd29  8773490.0x (+17.021%) 1902 stones (0.008949%/stone) 17178 stones
+PSd30 10253274.0x (+16.867%) 2228 stones (0.007570%/stone) 19406 stones
+PS+ 9 11173168.5x ( +8.972%) 1350 stones (0.006646%/stone) 20756 stones
+PS+10 12093063.0x ( +8.233%) 1650 stones (0.004990%/stone) 22406 stones
+PS+11 13012957.5x ( +7.607%) 2050 stones (0.003711%/stone) 24456 stones
+PS+12 13932852.0x ( +7.069%) 2600 stones (0.002719%/stone) 27056 stones
+PS+13 14852746.5x ( +6.602%) 3300 stones (0.002001%/stone) 30356 stones
+PS+14 15772641.0x ( +6.193%) 4150 stones (0.001492%/stone) 34506 stones
